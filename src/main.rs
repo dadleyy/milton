@@ -26,17 +26,58 @@ struct HookPayload {
   progress: Option<HookProgressPayload>,
 }
 
+impl HookPayload {
+  pub fn qualified(&mut self) -> Option<QualifiedPayload> {
+    let top = self.topic.take();
+    let dev = self.device_identifier.take();
+    let mes = self.message.take();
+
+    top.zip(dev).zip(mes).map(|((top, dev), mes)| QualifiedPayload {
+      topic: top,
+      device_identifier: dev,
+      message: mes,
+    })
+  }
+}
+
+#[derive(Debug, Clone)]
+struct QualifiedPayload {
+  topic: String,
+  device_identifier: String,
+  message: String,
+}
+
 async fn receive(mut req: Request<State>) -> tide::Result {
-  let body = req
+  let mut body = req
     .body_json::<HookPayload>()
     .await
     .map_err(|error| {
-      log::warn!("unable to read request body into string - {}", error);
+      log::warn!("unable to read request body into string - '{}'", error);
       error
     })
     .unwrap_or_default();
 
-  log::info!("request received '{:?}'", body);
+  let qualified = match body.qualified() {
+    Some(q) => q,
+    None => {
+      log::info!("no valid state from payload, skipping");
+      return Ok(Response::builder(200).build());
+    }
+  };
+
+  log::info!("device[{}] - {}", qualified.device_identifier, qualified.message);
+
+  let blink = match qualified.topic.as_str() {
+    "Print Started" => 1,
+    _ => 0,
+  };
+
+  req.state().sender.send(blink).await.map_err(|error| {
+    log::warn!("unable to send blink message to channel - {}", error);
+    tide::Error::from_str(500, "blinkr-problem")
+  })?;
+
+  log::info!("request received '{:?}'", qualified);
   Ok("yay".into())
 }
 
@@ -48,21 +89,30 @@ async fn missing(mut _req: Request<State>) -> tide::Result {
 async fn worker(receiver: Receiver<u8>) -> Result<()> {
   log::info!("worker thread spawned");
 
-  let blinkrs = blinkrs::Blinkers::new().map_err(|error| {
+  let blinker = blinkrs::Blinkers::new().map_err(|error| {
     log::warn!("unable to initialize blink(1) usb library - {}", error);
     std::io::Error::new(std::io::ErrorKind::Other, error)
   })?;
 
   log::info!(
     "found {} devices",
-    blinkrs.device_count().map_err(|error| {
+    blinker.device_count().map_err(|error| {
       log::warn!("unable to count devices - {}", error);
       std::io::Error::new(std::io::ErrorKind::Other, error)
     })?,
   );
 
   while let Ok(i) = receiver.recv().await {
-    log::info!("received message {}", i);
+    log::info!("[worker] received message {}", i);
+
+    let attempt = match i {
+      0 => blinker.send(blinkrs::Message::Immediate(blinkrs::Color::Red)),
+      _ => blinker.send(blinkrs::Message::Off),
+    };
+
+    if let Err(error) = attempt {
+      log::warn!("unable to send blinkrs message - '{}'", error);
+    }
   }
 
   Ok(())

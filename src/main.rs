@@ -73,8 +73,8 @@ async fn receive(mut req: Request<State>) -> tide::Result {
   let blink = match qualified.topic.as_str() {
     "Print Done" => 0,
     "Print Started" => 1,
-    "Print Progress" => 1,
-    _ => 0,
+    "Print Progress" => 2,
+    _ => 3,
   };
 
   req.state().sender.send(blink).await.map_err(|error| {

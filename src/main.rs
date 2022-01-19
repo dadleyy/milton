@@ -71,7 +71,9 @@ async fn receive(mut req: Request<State>) -> tide::Result {
   log::info!("device[{}] - {}", qualified.device_identifier, qualified.message);
 
   let blink = match qualified.topic.as_str() {
+    "Print Done" => 0,
     "Print Started" => 1,
+    "Print Progress" => 1,
     _ => 0,
   };
 
@@ -109,7 +111,8 @@ async fn worker(receiver: Receiver<u8>) -> Result<()> {
     log::info!("[worker] received message {}", i);
 
     let attempt = match i {
-      0 => blinker.send(blinkrs::Message::Immediate(blinkrs::Color::Red)),
+      0 => blinker.send(blinkrs::Message::Immediate(blinkrs::Color::Green)),
+      1 => blinker.send(blinkrs::Message::Immediate(blinkrs::Color::Blue)),
       _ => blinker.send(blinkrs::Message::Off),
     };
 
@@ -129,10 +132,8 @@ struct State {
 async fn serve() -> Result<()> {
   log::info!("thread running, opening blinkrs");
   let (s, r) = channel::bounded(1);
-
   let handle = async_std::task::spawn(worker(r));
   let addr = std::env::var("WEBHOOK_LISTENER_ADDR").unwrap_or("0.0.0.0:8081".into());
-
   log::info!("preparing web thread on addr '{}'", addr);
   let mut app = tide::with_state::<State>(State { sender: s });
   app.at("/incoming-webhook").post(receive);

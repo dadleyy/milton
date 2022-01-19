@@ -5,6 +5,7 @@ use tide::{Request, Response};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct HookProgressPayload {
   print_time_left: Option<u64>,
   print_time: Option<u64>,
@@ -12,12 +13,14 @@ struct HookProgressPayload {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct HookStatePayload {
   text: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct HookPayload {
   device_identifier: Option<String>,
   topic: Option<String>,

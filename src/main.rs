@@ -131,12 +131,13 @@ async fn serve() -> Result<()> {
   let (s, r) = channel::bounded(1);
 
   let handle = async_std::task::spawn(worker(r));
+  let addr = std::env::var("WEBHOOK_LISTENER_ADDR").unwrap_or("0.0.0.0:8081".into());
 
-  log::info!("preparing web thread");
+  log::info!("preparing web thread on addr '{}'", addr);
   let mut app = tide::with_state::<State>(State { sender: s });
   app.at("/incoming-webhook").post(receive);
   app.at("/*").all(missing);
-  app.listen("0.0.0.0:8080").await?;
+  app.listen(&addr).await?;
   handle.await?;
   Ok(())
 }

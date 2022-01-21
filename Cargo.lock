@@ -362,9 +362,9 @@ dependencies = [
 
 [[package]]
 name = "blinkrs"
-version = "1.0.2"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d22da52239126cf4d379b0f9dcbb7de7a3d4e0013cea43efb95d035d6e2d78eb"
+checksum = "0fa1977f2bb6af57c410d65da1ce18e226a462e342dd78a84ccaaf983e54efac"
 dependencies = [
  "rusb",
 ]
@@ -904,9 +904,9 @@ checksum = "1b03d17f364a3a042d5e5d46b053bbbf82c92c9430c592dd4c064dc6ee997125"
 
 [[package]]
 name = "libusb1-sys"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e22e89d08bbe6816c6c5d446203b859eba35b8fa94bf1b7edb2f6d25d43f023f"
+checksum = "b8772b7e8d4d988e19684aec5a3f5e470ecaf5c705cf0303da3973508e873027"
 dependencies = [
  "cc",
  "libc",
@@ -963,6 +963,19 @@ checksum = "19e64526ebdee182341572e50e9ad03965aa510cd94427a4549448f285e957a1"
 dependencies = [
  "hermit-abi",
  "libc",
+]
+
+[[package]]
+name = "octoprint-blinkrs"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "blinkrs",
+ "dotenv",
+ "env_logger",
+ "log",
+ "serde",
+ "tide",
 ]
 
 [[package]]
@@ -1193,9 +1206,9 @@ checksum = "56770675ebc04927ded3e60633437841581c285dc6236109ea25fbf3beb7b59e"
 
 [[package]]
 name = "rusb"
-version = "0.8.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9a5084628cc5be77b1c750b3e5ee0cc519d2f2491b3f06b78b3aac3328b00ad"
+checksum = "83b454219aa5007af92a042ec13b2035325318a21d3c6be18bf592f841430794"
 dependencies = [
  "libc",
  "libusb1-sys",
@@ -1721,19 +1734,6 @@ checksum = "38eb105f1c59d9eaa6b5cdc92b859d85b926e82cb2e0945cd0c9259faa6fe9fb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "webhook-listener"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "blinkrs",
- "dotenv",
- "env_logger",
- "log",
- "serde",
- "tide",
 ]
 
 [[package]]

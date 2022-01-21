@@ -1,0 +1,10 @@
+[Unit]
+Description="Blinkrs Octoprint Webhook Receiver"
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/octoprint-blinkrs
+WorkingDirectory=/home/rock64/src/octoprint-blinkrs
+
+[Install]
+WantedBy=multi-user.target

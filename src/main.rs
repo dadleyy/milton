@@ -3,10 +3,46 @@ use std::io::Result;
 use std::time::Duration;
 
 use async_std::{channel, channel::Receiver, channel::Sender};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tide::{Request, Response};
 
 const HEARTBEAT_PATTERN: &'static str = include_str!("../data/heartbeat-pattern-one.txt");
+const CLIENT_INDEX_HTML: &'static str = include_str!("../data/index.html");
+
+#[derive(Clone)]
+struct ClientCache {
+  html: String,
+}
+
+#[derive(Clone)]
+struct Heart {
+  sender: Sender<blinkrs::Message>,
+  receiver: Receiver<bool>,
+}
+
+#[derive(Default, Debug, Serialize)]
+struct ControlResponse {
+  ok: bool,
+}
+
+#[derive(Default, Debug, Deserialize)]
+struct ControlQuery {
+  mode: String,
+  code: String,
+}
+
+#[derive(Clone)]
+struct State {
+  sender: Sender<blinkrs::Message>,
+  heart: Sender<bool>,
+  client: ClientCache,
+}
+
+impl State {
+  pub fn index_html(&self) -> String {
+    self.client.html.clone()
+  }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -55,14 +91,18 @@ struct QualifiedPayload {
   message: String,
 }
 
-#[derive(Default, Debug, Deserialize)]
-struct ControlQuery {
-  mode: String,
-}
+async fn control(mut req: Request<State>) -> tide::Result {
+  let query = req.body_json::<ControlQuery>().await.map_err(|error| {
+    log::warn!("uanble to parse control payload - {}", error);
+    tide::Error::from_str(422, "bad-payload")
+  })?;
 
-async fn control(req: Request<State>) -> tide::Result {
-  let query = req.query::<ControlQuery>().unwrap_or_default();
-  log::debug!("received control request - {:?}", query);
+  let actual = std::env::var("HEARTBEAT_SECRET_CODE").unwrap_or_default();
+
+  if actual != query.code {
+    log::warn!("unauthorized attempt to set heartbeat");
+    return Ok(tide::Response::builder(404).body("not-found").build());
+  }
 
   let result = match query.mode.as_str() {
     "off" => req.state().heart.send(false).await.map(|_| ()),
@@ -74,7 +114,7 @@ async fn control(req: Request<State>) -> tide::Result {
     log::warn!("unable to send control message to heartbeat - {}", error);
   }
 
-  Ok("".into())
+  tide::Body::from_json(&ControlResponse { ok: true }).map(|bod| tide::Response::builder(200).body(bod).build())
 }
 
 async fn receive(mut req: Request<State>) -> tide::Result {
@@ -187,6 +227,17 @@ fn parse_pattern(source: &str) -> HashMap<u8, HashMap<u8, blinkrs::Color>> {
   })
 }
 
+async fn client(req: tide::Request<State>) -> tide::Result {
+  let bod = tide::Body::from_string(req.state().index_html());
+
+  Ok(
+    tide::Response::builder(200)
+      .content_type(tide::http::mime::HTML)
+      .body(bod)
+      .build(),
+  )
+}
+
 async fn heartbeat(heart: Heart) {
   let mut frame = 0u8;
   let mut working = true;
@@ -204,7 +255,7 @@ async fn heartbeat(heart: Heart) {
 
     if let Ok(pulse) = heart.receiver.try_recv() {
       if pulse == false && working == true {
-        log::debug!("received kill signal while working, no longer applying light changes");
+        log::info!("received kill signal while working, no longer applying light changes");
 
         if let Err(error) = heart.sender.send(blinkrs::Message::Off).await {
           log::warn!("unable to kill lights on pulse terminal - {}", error);
@@ -212,7 +263,7 @@ async fn heartbeat(heart: Heart) {
         working = false;
       }
       if pulse == true && working == false {
-        log::debug!("restarting heart into working state");
+        log::info!("restarting heart into working state");
         working = true;
       }
     }
@@ -244,18 +295,6 @@ async fn heartbeat(heart: Heart) {
   }
 }
 
-#[derive(Clone)]
-struct Heart {
-  sender: Sender<blinkrs::Message>,
-  receiver: Receiver<bool>,
-}
-
-#[derive(Clone)]
-struct State {
-  sender: Sender<blinkrs::Message>,
-  heart: Sender<bool>,
-}
-
 async fn serve() -> Result<()> {
   log::info!("thread running, opening blinkrs");
   let (sender, receiver) = channel::bounded(1);
@@ -267,16 +306,23 @@ async fn serve() -> Result<()> {
 
   let wh = async_std::task::spawn(worker(receiver));
   let hbh = async_std::task::spawn(heartbeat(heart));
+  let hburl = std::env::var("CLIENT_HEARTBEAT_URL").unwrap_or_default();
+  let html = CLIENT_INDEX_HTML
+    .to_string()
+    .replace("{{HEARTBEAT_URL}}", hburl.as_str());
 
   let addr = std::env::var("WEBHOOK_LISTENER_ADDR").unwrap_or("0.0.0.0:8081".into());
   log::info!("preparing web thread on addr '{}'", addr);
-
-  let mut app = tide::with_state::<State>(State {
+  let state = State {
     sender: sender.clone(),
     heart: arteries.0,
-  });
+    client: ClientCache { html: html },
+  };
+
+  let mut app = tide::with_state(state);
   app.at("/incoming-webhook").post(receive);
-  app.at("/heartbeat").get(control);
+  app.at("/heartbeat").post(control);
+  app.at("/").get(client);
   app.at("/*").all(missing);
   app.listen(&addr).await?;
 

@@ -1,0 +1,82 @@
+<!doctype html>
+<html class="bg-zinc-900 text-zinc-900">
+  <head>
+    <meta charset="utf-8" />
+    <title>s3 printing</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css"
+      integrity="sha512-NmLkDIU1C/C88wi324HBc+S2kLhi08PN5GDeUVVVC/BVt/9Izdsc9SVeVfA1UZbY3sHUlDSyRXhCzHfr6hmPPw=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <script src="https://kit.fontawesome.com/8b44b2f0d7.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+      html, body {
+        position: relative;
+        min-width: 100%;
+        min-height: 100%;
+      }
+      input:focus {
+        outline: none;
+      }
+      button {
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body class="py-8 text-center">
+    <div class="inline-block relative">
+      <div class="block mb-2">
+        <input
+          type="password"
+          placeholder="Heartbeat Code"
+          id="code-value"
+          style="width: 200px"
+          class="px-3 py-2 border border-solid bg-zinc-800 border-black rounded text-zinc-400"
+        />
+      </div>
+
+      <div class="flex content-center">
+        <button type="button" id="on-button" class="block px-3 py-2 bg-cyan-600 mr-5 rounded">
+          ON
+        </button>
+        <button type="button" id="off-button" class="block px-3 py-2 bg-yellow-600 rounded">
+          OFF
+        </button>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      (function() {
+        const HEARTBEAT_URL = '{{HEARTBEAT_URL}}';
+        const FETCH_HEADERS = [
+          ['Content-Type', 'application/json'],
+        ];
+
+        async function setMode(mode) {
+          const input = document.getElementById('code-value');
+          const code = input ? input.value : '';
+
+          try {
+            const body = JSON.stringify({ code, mode });
+            await fetch(HEARTBEAT_URL, { method: 'POST', body, headers: FETCH_HEADERS });
+          } catch (error) {
+            console.log('unable to request heartbeat mode:', error);
+          }
+        }
+
+        function bootstrap() {
+          const onb = document.getElementById('on-button');
+          const offb = document.getElementById('off-button');
+          onb.onclick = () => setMode('on');
+          offb.onclick = () => setMode('off');
+        }
+
+        window.onload = bootstrap;
+      })();
+    </script>
+  </body>
+</html>

@@ -152,8 +152,8 @@ async fn webhook(mut req: Request<State>) -> tide::Result {
   Ok("ok".into())
 }
 
-async fn missing(mut _req: Request<State>) -> tide::Result {
-  log::debug!("[warning] unknown request received");
+async fn missing(req: Request<State>) -> tide::Result {
+  log::warn!("[warning] unknown request received - '{}'", req.url().path());
   Ok(Response::builder(404).build())
 }
 

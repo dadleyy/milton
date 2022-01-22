@@ -191,6 +191,10 @@ async fn heartbeat(heart: Heart) {
   log::debug!("heartbeat thread started");
   let mut frame = 0u8;
   let mut working = true;
+  let delay = std::env::var("HEARTBEAT_FRAME_DELAY")
+    .ok()
+    .and_then(|v| v.parse::<u64>().ok())
+    .unwrap_or(2000);
 
   let pattern = parse_pattern(HEARTBEAT_PATTERN);
   log::debug!("parsed pattern - {:?}", pattern);
@@ -215,7 +219,7 @@ async fn heartbeat(heart: Heart) {
     }
 
     if !working {
-      async_std::task::sleep(Duration::from_millis(2000)).await;
+      async_std::task::sleep(Duration::from_millis(delay)).await;
       continue;
     }
 

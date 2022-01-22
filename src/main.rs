@@ -117,7 +117,7 @@ async fn control(mut req: Request<State>) -> tide::Result {
   tide::Body::from_json(&ControlResponse { ok: true }).map(|bod| tide::Response::builder(200).body(bod).build())
 }
 
-async fn receive(mut req: Request<State>) -> tide::Result {
+async fn webhook(mut req: Request<State>) -> tide::Result {
   let mut body = req
     .body_json::<HookPayload>()
     .await
@@ -320,7 +320,7 @@ async fn serve() -> Result<()> {
   };
 
   let mut app = tide::with_state(state);
-  app.at("/incoming-webhook").post(receive);
+  app.at("/incoming-webhook").post(webhook);
   app.at("/heartbeat").post(control);
   app.at("/").get(client);
   app.at("/*").all(missing);

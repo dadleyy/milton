@@ -22,6 +22,11 @@
       input:focus {
         outline: none;
       }
+      input[type="password"]::placeholder {
+        color: rgba(0,0,0,0.5);
+        font-size: 1.2em;
+        font-style: italic;
+      }
       button {
         flex: 1;
       }
@@ -35,7 +40,7 @@
           placeholder="Heartbeat Code"
           id="code-value"
           style="width: 200px"
-          class="px-3 py-2 border border-solid bg-zinc-800 border-black rounded text-zinc-400"
+          class="px-3 py-2 border border-solid bg-zinc-800 border-black rounded focus:text-zinc-400"
         />
       </div>
 

@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::io::Result;
 use std::time::Duration;
 
 use async_std::{channel, channel::Receiver, channel::Sender};
 use serde::Deserialize;
 use tide::{Request, Response};
+
+const HEARTBEAT_PATTERN: &'static str = include_str!("../data/heartbeat-pattern-one.txt");
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,22 +57,22 @@ struct QualifiedPayload {
 
 #[derive(Default, Debug, Deserialize)]
 struct ControlQuery {
-	mode: String,
+  mode: String,
 }
 
 async fn control(req: Request<State>) -> tide::Result {
-	let query = req.query::<ControlQuery>().unwrap_or_default();
+  let query = req.query::<ControlQuery>().unwrap_or_default();
   log::debug!("received control request - {:?}", query);
 
-	let result = match query.mode.as_str() {
-		"off" => req.state().heart.send(false).await.map(|_| ()),
-		"on" => req.state().heart.send(true).await.map(|_| ()),
-		_ => Ok(()),
-	};
+  let result = match query.mode.as_str() {
+    "off" => req.state().heart.send(false).await.map(|_| ()),
+    "on" => req.state().heart.send(true).await.map(|_| ()),
+    _ => Ok(()),
+  };
 
-	if let Err(error) = result {
-		log::warn!("unable to send control message to heartbeat - {}", error);
-	}
+  if let Err(error) = result {
+    log::warn!("unable to send control message to heartbeat - {}", error);
+  }
 
   Ok("".into())
 }
@@ -115,7 +118,7 @@ async fn missing(mut _req: Request<State>) -> tide::Result {
 }
 
 async fn worker(receiver: Receiver<blinkrs::Message>) -> Result<()> {
-  log::nifo!("worker thread spawned");
+  log::info!("worker thread spawned");
 
   let blinker = blinkrs::Blinkers::new().map_err(|error| {
     log::warn!("unable to initialize blink(1) usb library - {}", error);
@@ -142,13 +145,59 @@ async fn worker(receiver: Receiver<blinkrs::Message>) -> Result<()> {
   Ok(())
 }
 
+fn parse_pattern(source: &str) -> HashMap<u8, HashMap<u8, blinkrs::Color>> {
+  source.lines().fold(HashMap::with_capacity(100), |mut store, line| {
+    let mut bits = line.split(" ").into_iter();
+
+    let frame = bits.next().and_then(|f| {
+      let mut chars = f.chars();
+      if let Some('F') = chars.next() {
+        return chars.collect::<String>().parse::<u8>().ok();
+      }
+      return None;
+    });
+
+    let ledn = bits.next().and_then(|f| {
+      let mut chars = f.chars();
+      if let Some('L') = chars.next() {
+        return chars.collect::<String>().parse::<u8>().ok();
+      }
+      return None;
+    });
+
+    let colors = bits
+      .into_iter()
+      .map(|s| s.parse::<u8>().ok())
+      .flatten()
+      .collect::<Vec<u8>>();
+
+    let red = colors.get(0);
+    let green = colors.get(1);
+    let blue = colors.get(2);
+    let combined = frame.zip(ledn).zip(red).zip(green).zip(blue);
+
+    if let Some(((((frame, led), red), green), blue)) = combined {
+      let mut existing = store.remove(&frame).unwrap_or_else(|| HashMap::with_capacity(10));
+      existing.insert(led, blinkrs::Color::Three(*red, *green, *blue));
+      log::debug!("pattern frame[{}] led[{}] {:?}", frame, led, colors);
+      store.insert(frame, existing);
+    }
+
+    store
+  })
+}
+
 async fn heartbeat(heart: Heart) {
   log::debug!("heartbeat thread started");
-  let mut step = 0u8;
+  let mut frame = 0u8;
   let mut working = true;
+
+  let pattern = parse_pattern(HEARTBEAT_PATTERN);
+  log::debug!("parsed pattern - {:?}", pattern);
 
   loop {
     log::debug!("beating heart, checking for kill message first");
+    let mut inc = 1;
 
     if let Ok(pulse) = heart.receiver.try_recv() {
       if pulse == false && working == true {
@@ -165,31 +214,29 @@ async fn heartbeat(heart: Heart) {
       }
     }
 
-    if working == true {
-      let color = match step {
-        0 => blinkrs::Color::Three(255, 0, 0),
-        1 => blinkrs::Color::Three(0, 255, 0),
-        2 => blinkrs::Color::Three(0, 0, 255),
-        _ => blinkrs::Color::Three(0, 255, 255),
-      };
-
-      step = step + 1;
-
-      if step > 2 {
-        step = 0;
-      }
-
-			let mut index = 0;
-
-			while index < 4 {
-				if let Err(error) = heart.sender.send(blinkrs::Message::Immediate(color, Some(3 + index))).await {
-					log::warn!("unable to beat heart - {}", error);
-				}
-
-				index += 1;
-			}
+    if !working {
+      async_std::task::sleep(Duration::from_millis(2000)).await;
+      continue;
     }
 
+    let segment = pattern.get(&frame);
+
+    if let Some(mappings) = segment {
+      for (led, color) in mappings.iter() {
+        let message = blinkrs::Message::Immediate(color.clone(), Some(*led));
+        log::debug!("led[{}] color [{:?}]", led, color);
+
+        if let Err(error) = heart.sender.send(message).await {
+          log::warn!("uanble to send frame command - {}", error);
+        }
+      }
+    } else {
+      log::info!("completed pattern, restarting");
+      frame = 0;
+      inc = 0;
+    }
+
+    frame = frame + inc;
     async_std::task::sleep(Duration::from_millis(2000)).await;
   }
 }

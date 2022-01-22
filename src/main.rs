@@ -188,7 +188,6 @@ fn parse_pattern(source: &str) -> HashMap<u8, HashMap<u8, blinkrs::Color>> {
 }
 
 async fn heartbeat(heart: Heart) {
-  log::debug!("heartbeat thread started");
   let mut frame = 0u8;
   let mut working = true;
   let delay = std::env::var("HEARTBEAT_FRAME_DELAY")
@@ -197,7 +196,7 @@ async fn heartbeat(heart: Heart) {
     .unwrap_or(2000);
 
   let pattern = parse_pattern(HEARTBEAT_PATTERN);
-  log::debug!("parsed pattern - {:?}", pattern);
+  log::info!("[heartbeat] {:?}, starting with {} delay", pattern, delay);
 
   loop {
     log::debug!("beating heart, checking for kill message first");
@@ -241,7 +240,7 @@ async fn heartbeat(heart: Heart) {
     }
 
     frame = frame + inc;
-    async_std::task::sleep(Duration::from_millis(2000)).await;
+    async_std::task::sleep(Duration::from_millis(delay)).await;
   }
 }
 

@@ -8,6 +8,7 @@ use async_std::channel::{Receiver, Sender};
 pub enum HeartControl {
   Stop,
   Start,
+  Load(String),
 }
 
 #[derive(Default)]
@@ -51,7 +52,7 @@ impl HeartBuilder {
     let dir = patterns.ok_or(Error::new(ErrorKind::Other, "missing pattern directory"))?;
 
     if dir.is_dir() != true {
-      let warning = format!("{:?} is not a valid directory", dir);
+      let warning = format!("'{:?}' is not a valid directory for pattern storage", dir);
       return Err(Error::new(ErrorKind::Other, warning));
     }
 
@@ -214,6 +215,17 @@ pub async fn beat(heart: Heart) -> Result<()> {
         HeartControl::Stop => {
           cursor.stop();
           log::info!("received stop command");
+        }
+        HeartControl::Load(name) => {
+          log::info!("attempting to load pattern '{}'", name);
+
+          if let Ok(pat) = heart.read(&name).await.map_err(|error| {
+            log::warn!("unable to load pattern '{}' - {}", name, error);
+            error
+          }) {
+            log::info!("loaded new pattern '{}'", name);
+            cursor.seek(pat);
+          }
         }
         HeartControl::Start => {
           cursor.start();

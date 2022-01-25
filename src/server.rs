@@ -42,15 +42,26 @@ impl State {
   }
 }
 
-#[derive(Default, Debug, Serialize)]
+#[derive(Debug, Serialize)]
 struct ControlResponse {
   ok: bool,
+  timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+impl Default for ControlResponse {
+  fn default() -> Self {
+    Self {
+      ok: true,
+      timestamp: chrono::Utc::now(),
+    }
+  }
 }
 
 #[derive(Default, Debug, Deserialize)]
 struct ControlQuery {
   mode: String,
   code: String,
+  pattern: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -116,14 +127,21 @@ pub async fn control(mut req: Request<State>) -> tide::Result {
   let result = match query.mode.as_str() {
     "off" => req.state().heart.send(HeartControl::Stop).await.map(|_| ()),
     "on" => req.state().heart.send(HeartControl::Start).await.map(|_| ()),
-    _ => Ok(()),
+    "load" => {
+      let name = query.pattern.ok_or(Error::new(ErrorKind::Other, "missing name"))?;
+      req.state().heart.send(HeartControl::Load(name)).await.map(|_| ())
+    }
+    unknown => {
+      log::warn!("unrecognized control input from payload - '{}'", unknown);
+      Ok(())
+    }
   };
 
   if let Err(error) = result {
     log::warn!("unable to send control message to heartbeat - {}", error);
   }
 
-  tide::Body::from_json(&ControlResponse { ok: true }).map(|bod| tide::Response::builder(200).body(bod).build())
+  tide::Body::from_json(&ControlResponse::default()).map(|bod| tide::Response::builder(200).body(bod).build())
 }
 
 pub async fn webhook(mut req: Request<State>) -> tide::Result {

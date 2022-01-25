@@ -155,6 +155,7 @@ impl Cursor {
     if self.1 == false {
       self.0 = 0;
     }
+
     self.1 = true;
   }
 
@@ -162,12 +163,23 @@ impl Cursor {
     if self.1 == true {
       self.0 = 0;
     }
+
     self.1 = false;
   }
 
+  // If we are not running and we're on the 0th frame, we will send a off-all blinkrs message.
+  // To avoid sending this over and over again, we're using the frame will not running to indicate
+  // whether or not we have already instructed the blinker to turn off.
   fn inc(&mut self) {
-    if self.1 {
-      self.0 = self.0.overflowing_add(1).0;
+    let Cursor(frame, running, _) = self;
+
+    if *running != true && *frame == 0u8 {
+      self.0 = 1;
+      return;
+    }
+
+    if *running {
+      self.0 = frame.overflowing_add(1).0;
     }
   }
 
@@ -177,6 +189,11 @@ impl Cursor {
 
   fn messages(&self) -> Vec<blinkrs::Message> {
     let Cursor(frame, running, pattern) = self;
+
+    if !running && *frame == 0 {
+      log::info!("cursor off and on 0th frame, sending kill to blinker");
+      return vec![blinkrs::Message::Off];
+    }
 
     if !running {
       return vec![];
@@ -213,8 +230,8 @@ pub async fn beat(heart: Heart) -> Result<()> {
     if let Ok(control) = heart.receiver.try_recv() {
       match control {
         HeartControl::Stop => {
+          log::info!("received stop command, stopping cursor");
           cursor.stop();
-          log::info!("received stop command");
         }
         HeartControl::Load(name) => {
           log::info!("attempting to load pattern '{}'", name);

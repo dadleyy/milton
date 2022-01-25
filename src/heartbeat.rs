@@ -16,6 +16,7 @@ pub struct HeartBuilder {
   sender: Option<Sender<blinkrs::Message>>,
   receiver: Option<Receiver<HeartControl>>,
   delay: Option<std::time::Duration>,
+  ledr: Option<(u8, u8)>,
   patterns: Option<PathBuf>,
 }
 
@@ -46,10 +47,11 @@ impl HeartBuilder {
       receiver,
       patterns,
       delay,
+      ledr,
     } = self;
-    let su = sender.ok_or(Error::new(ErrorKind::Other, ""))?;
-    let ru = receiver.ok_or(Error::new(ErrorKind::Other, ""))?;
-    let dir = patterns.ok_or(Error::new(ErrorKind::Other, "missing pattern directory"))?;
+    let su = sender.ok_or(Error::new(ErrorKind::Other, "heart missing message output channel."))?;
+    let ru = receiver.ok_or(Error::new(ErrorKind::Other, "missing command receiver channel."))?;
+    let dir = patterns.ok_or(Error::new(ErrorKind::Other, "missing pattern directory."))?;
 
     if dir.is_dir() != true {
       let warning = format!("'{:?}' is not a valid directory for pattern storage", dir);
@@ -61,6 +63,7 @@ impl HeartBuilder {
       receiver: ru,
       delay: delay.unwrap_or(std::time::Duration::from_millis(100)),
       patterns: dir,
+      ledr: ledr.unwrap_or((crate::constants::DEFAULT_LEDN_START, crate::constants::DEFAULT_LEDN_END)),
     })
   }
 }
@@ -71,6 +74,7 @@ pub struct Heart {
   receiver: Receiver<HeartControl>,
   delay: std::time::Duration,
   patterns: PathBuf,
+  ledr: (u8, u8),
 }
 
 impl Heart {
@@ -89,7 +93,19 @@ impl Heart {
       log::warn!("unable to read '{:?}' as utf-8 string - {}", target, error);
       Error::new(ErrorKind::Other, "invalid utf-8 source")
     })?;
-    patternize(&source)
+
+    patternize(&source).map(|p| {
+      p.into_iter()
+        .map(|(frame, mut map)| {
+          for light in self.ledr.0..(self.ledr.1 + 1) {
+            let color = map.remove(&light).unwrap_or(blinkrs::Color::Three(0, 0, 0));
+            map.insert(light, color);
+          }
+
+          (frame, map)
+        })
+        .collect()
+    })
   }
 }
 
@@ -102,10 +118,20 @@ fn rl(
     Ok(store) => store,
   };
 
-  let mut bits = line.split(" ").into_iter();
+  if line.trim().len() == 0 {
+    log::debug!("skipping empty line");
+    return Ok(store);
+  }
 
-  let frame = bits
-    .next()
+  let mut bits = line.split(" ").into_iter();
+  let leader = bits.next();
+
+  if let Some("#") = leader {
+    log::debug!("comment - '{}'", line);
+    return Ok(store);
+  }
+
+  let frame = leader
     .ok_or(Error::new(ErrorKind::Other, "malformed line"))
     .and_then(|f| {
       let mut chars = f.chars();

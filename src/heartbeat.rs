@@ -89,51 +89,80 @@ impl Heart {
       log::warn!("unable to read '{:?}' as utf-8 string - {}", target, error);
       Error::new(ErrorKind::Other, "invalid utf-8 source")
     })?;
-    parse_pattern(&source)
+    patternize(&source)
   }
 }
 
-fn parse_pattern(source: &str) -> Result<HashMap<u8, HashMap<u8, blinkrs::Color>>> {
-  let out = source.lines().fold(HashMap::with_capacity(100), |mut store, line| {
-    let mut bits = line.split(" ").into_iter();
+fn rl(
+  store: Result<HashMap<u8, HashMap<u8, blinkrs::Color>>>,
+  line: &str,
+) -> Result<HashMap<u8, HashMap<u8, blinkrs::Color>>> {
+  let mut store = match store {
+    Err(error) => return Err(error),
+    Ok(store) => store,
+  };
 
-    let frame = bits.next().and_then(|f| {
+  let mut bits = line.split(" ").into_iter();
+
+  let frame = bits
+    .next()
+    .ok_or(Error::new(ErrorKind::Other, "malformed line"))
+    .and_then(|f| {
       let mut chars = f.chars();
       if let Some('F') = chars.next() {
-        return chars.collect::<String>().parse::<u8>().ok();
+        return chars.collect::<String>().parse::<u8>().map_err(|error| {
+          log::warn!("uanble to parse frame number - {}", error);
+          Error::new(ErrorKind::Other, format!("{}", error))
+        });
       }
-      return None;
-    });
+      return Err(Error::new(ErrorKind::Other, "malformed-line"));
+    })?;
 
-    let ledn = bits.next().and_then(|f| {
+  let ledn = bits
+    .next()
+    .ok_or(Error::new(ErrorKind::Other, "malformed line"))
+    .and_then(|f| {
       let mut chars = f.chars();
       if let Some('L') = chars.next() {
-        return chars.collect::<String>().parse::<u8>().ok();
+        return chars.collect::<String>().parse::<u8>().map_err(|error| {
+          log::warn!("unable to parse led number - {}", error);
+          Error::new(ErrorKind::Other, format!("{}", error))
+        });
       }
-      return None;
-    });
+      return Err(Error::new(ErrorKind::Other, "malformed-line"));
+    })?;
 
-    let colors = bits
-      .into_iter()
-      .map(|s| s.parse::<u8>().ok())
-      .flatten()
-      .collect::<Vec<u8>>();
+  let colors = bits
+    .into_iter()
+    .map(|s| {
+      s.parse::<u8>().map_err(|error| {
+        log::warn!("unable to parse color - '{}'", error);
+        Error::new(ErrorKind::Other, "malformed-line")
+      })
+    })
+    .collect::<Result<Vec<u8>>>()?;
 
-    let red = colors.get(0);
-    let green = colors.get(1);
-    let blue = colors.get(2);
-    let combined = frame.zip(ledn).zip(red).zip(green).zip(blue);
+  let red = colors.get(0);
+  let green = colors.get(1);
+  let blue = colors.get(2);
+  let combined = red
+    .zip(green)
+    .zip(blue)
+    .map(|((r, g), b)| (r, g, b))
+    .ok_or(Error::new(ErrorKind::Other, "malformed-color"))?;
 
-    if let Some(((((frame, led), red), green), blue)) = combined {
-      let mut existing = store.remove(&frame).unwrap_or_else(|| HashMap::with_capacity(10));
-      existing.insert(led, blinkrs::Color::Three(*red, *green, *blue));
-      log::debug!("pattern frame[{}] led[{}] {:?}", frame, led, colors);
-      store.insert(frame, existing);
-    }
+  let mut existing = store.remove(&frame).unwrap_or_else(|| HashMap::with_capacity(10));
+  existing.insert(ledn, blinkrs::Color::Three(*combined.0, *combined.1, *combined.2));
+  store.insert(frame, existing);
 
-    store
-  });
-  Ok(out)
+  Ok(store)
+}
+
+fn patternize<P>(source: P) -> Result<HashMap<u8, HashMap<u8, blinkrs::Color>>>
+where
+  P: AsRef<str>,
+{
+  source.as_ref().lines().fold(Ok(HashMap::with_capacity(100)), rl)
 }
 
 struct Cursor(u8, bool, HashMap<u8, HashMap<u8, blinkrs::Color>>);
@@ -184,6 +213,8 @@ impl Cursor {
   }
 
   fn seek(&mut self, pattern: HashMap<u8, HashMap<u8, blinkrs::Color>>) {
+    self.0 = 0;
+    self.1 = true;
     self.2 = pattern;
   }
 
@@ -245,8 +276,8 @@ pub async fn beat(heart: Heart) -> Result<()> {
           }
         }
         HeartControl::Start => {
-          cursor.start();
           log::info!("received start command");
+          cursor.start();
         }
       }
     }

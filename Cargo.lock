@@ -966,7 +966,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "octoprint-blinkrs"
+name = "obelisk"
 version = "0.1.0"
 dependencies = [
  "async-std",

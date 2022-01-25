@@ -1,7 +1,15 @@
 [package]
-name = "octoprint-blinkrs"
+name = "obelisk"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+name = "obelisk"
+path = "src/lib.rs"
+
+[[bin]]
+name = "octoprint-blinkrs"
+path = "src/main.rs"
 
 [dependencies]
 dotenv = { version = "0.15.0" }

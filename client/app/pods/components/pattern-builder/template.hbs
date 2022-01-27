@@ -1,0 +1,33 @@
+<div class="mb-4 flex items-center">
+  <div class="block">
+    <button
+      type="button"
+      class="px-3 py-2 border border-solid border-blue-200 block text-center rounded-sm text-blue-200"
+      {{on "click" this.addFrame}}>
+      <i class="fa fa-plus" />
+    </button>
+  </div>
+</div>
+
+<table class="table-fixed w-full">
+  <tbody>
+    {{#each this.state.frames key="@index" as |frame fi|}}
+      <tr>
+        <td class="px-2 py-2 border-b border-t border-solid border-gray-800">{{fi}}</td>
+
+        {{#each frame.colors key="ledn" as |color|}}
+          <td class="px-2 py-2 border-b border-t border-solid border-gray-800 text-center">
+            <label class="block w-full">
+              <input
+                type="color"
+                value="{{color.hex}}"
+                class="block w-full border-none "
+                {{on "input" (fn this.setColor (array fi color.ledn))}}
+              />
+            </label>
+          </td>
+        {{/each}}
+      </tr>
+    {{/each}}
+  </tbody>
+</table>

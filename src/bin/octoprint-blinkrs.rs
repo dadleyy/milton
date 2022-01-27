@@ -81,8 +81,15 @@ async fn serve() -> Result<()> {
   log::info!("preparing web thread on addr '{}'", addr);
 
   let mut app = tide::with_state(server);
-  app.at("/incoming-webhook").post(obelisk::server::webhook);
-  app.at("/heartbeat").post(obelisk::server::control);
+  app.at("/incoming-webhook").post(obelisk::server::webhook::hook);
+
+  app.at("/control").post(obelisk::server::control::command);
+  app.at("/control").get(obelisk::server::control::query);
+
+  app.at("/auth/start").get(obelisk::server::auth::start);
+  app.at("/auth/complete").get(obelisk::server::auth::complete);
+  app.at("/auth/identify").get(obelisk::server::auth::identify);
+
   app.at("/*").all(obelisk::server::missing);
   app.listen(&addr).await?;
 

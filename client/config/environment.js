@@ -6,6 +6,8 @@ module.exports = function (environment) {
     podModulePrefix: 'octoprint-blinkrs/pods',
     environment,
     rootURL: '/',
+    apiURL: '/',
+    loginURL: 'http://127.0.0.1:8081/auth/start',
     locationType: 'history',
     EmberENV: {
       FEATURES: {

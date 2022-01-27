@@ -47,6 +47,22 @@ async fn serve() -> Result<()> {
         .map(std::time::Duration::from_millis)
         .unwrap_or(std::time::Duration::from_millis(500u64)),
     )
+    .ledr(
+      std::env::var("HEARTBEAT_LEDN_START")
+        .ok()
+        .and_then(|num| num.parse::<u8>().ok())
+        .unwrap_or_else(|| {
+          log::warn!("HEARTBEAT_LEDN_START not valid, defaulting");
+          obelisk::constants::DEFAULT_LEDN_START
+        }),
+      std::env::var("HEARTBEAT_LEDN_END")
+        .ok()
+        .and_then(|num| num.parse::<u8>().ok())
+        .unwrap_or_else(|| {
+          log::warn!("HEARTBEAT_LEDN_END not valid, defaulting");
+          obelisk::constants::DEFAULT_LEDN_END
+        }),
+    )
     .build()?;
 
   log::info!("initializing server...");

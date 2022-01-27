@@ -41,6 +41,12 @@ impl HeartBuilder {
     self
   }
 
+  pub fn ledr(mut self, start: u8, end: u8) -> Self {
+    self.ledr = Some((start, end));
+    log::debug!("heartbeat led range - [{} -> {}]", start, end);
+    self
+  }
+
   pub fn build(self) -> Result<Heart> {
     let Self {
       sender,

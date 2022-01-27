@@ -247,6 +247,8 @@ impl Cursor {
   fn messages(&self) -> Vec<blinkrs::Message> {
     let Cursor(frame, running, pattern) = self;
 
+    // If we're not running and are on the 0th frame, we know that this is the first time we have
+    // been asked for our message list while being off: so we send the off message.
     if !running && *frame == 0 {
       log::info!("cursor off and on 0th frame, sending kill to blinker");
       return vec![blinkrs::Message::Off];

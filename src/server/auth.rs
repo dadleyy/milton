@@ -124,7 +124,7 @@ pub async fn identify(request: Request<State>) -> Result {
   let mut res = AuthIdentifyResponse::default();
 
   if let Some(claims) = claims {
-    let user = fetch_user(&claims.token).await;
+    let user = fetch_user("hello").await;
     res.ok = user.is_some();
     res.user = user;
   }
@@ -139,21 +139,21 @@ pub async fn complete(request: Request<State>) -> Result {
     .find_map(|(k, v)| if k == "code" { Some(v) } else { None })
     .ok_or(Error::from_str(404, "no-code"))?;
 
-  // Attempt top exchange our code with the oAuth provider for a token.
-  let payload = AuthCodeRequest {
-    code: code.into(),
-    ..AuthCodeRequest::default()
-  };
+  let oauth = request.state().oauth();
 
-  let destination = std::env::var("AUTH_0_TOKEN_URI").unwrap_or_else(|error| {
+  // Attempt top exchange our code with the oAuth provider for a token.
+  let payload = oauth.auth_token_payload(&String::from(code))?;
+  log::info!("requesting token - {:?}", payload);
+  let destination = oauth.token_uri().map_err(|error| {
     log::warn!("missing auth 0 token url environment - {}", error);
-    "".into()
-  });
+    Error::from_str(500, "bad-oauth")
+  })?;
 
   let mut response = surf::post(&destination).body_json(&payload)?.await?;
-  let token = token_from_response(&mut response)
-    .await
-    .ok_or(Error::from_str(404, "token-exchange"))?;
+  let token = token_from_response(&mut response).await.ok_or_else(|| {
+    log::warn!("unable to parse token from response");
+    Error::from_str(404, "token-exchange")
+  })?;
 
   let user = fetch_user(&token).await.ok_or(Error::from_str(404, "user-not-found"))?;
 
@@ -162,7 +162,7 @@ pub async fn complete(request: Request<State>) -> Result {
     return Err(Error::from_str(404, "user-not-found"));
   }
 
-  let jwt = Claims::for_sub(&user.sub, &token).encode()?;
+  let jwt = Claims::for_sub(&user.sub).encode()?;
 
   let cookie = format!("{}={}; {}", "_obs", jwt, COOKIE_SET_FLAGS);
 
@@ -181,30 +181,11 @@ pub async fn complete(request: Request<State>) -> Result {
   Ok(response)
 }
 
-pub async fn start(_req: Request<State>) -> Result {
-  let client_id = std::env::var("AUTH_0_CLIENT_ID").ok();
-  let auth_uri = std::env::var("AUTH_0_AUTH_URI").ok();
-  let redir_uri = std::env::var("AUTH_0_REDIRECT_URI").ok();
+pub async fn start(request: Request<State>) -> Result {
   log::info!("initializing oauth redirect");
-
-  client_id
-    .zip(auth_uri)
-    .zip(redir_uri)
-    .ok_or_else(|| {
-      log::warn!("auth0 credentials not configured properly, please check environment");
-      Error::from_str(500, "missing auth creds")
-    })
-    .and_then(|((id, auth), redir)| {
-      let url = Url::parse_with_params(
-        &auth,
-        &[
-          ("client_id", id.as_str()),
-          ("redirect_uri", redir.as_str()),
-          ("response_type", &"code"),
-          ("scope", &"openid profile email"),
-        ],
-      )?;
-      log::info!("creating auth redir '{}'", &url);
-      Ok(Redirect::temporary(url.to_string()).into())
-    })
+  let destination = request.state().oauth().redirect_uri().map_err(|error| {
+    log::warn!("{}", error);
+    Error::from_str(500, "bad-oauth")
+  })?;
+  Ok(Redirect::temporary(destination).into())
 }

@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
   pub exp: usize,
+  pub iat: usize,
   pub oid: String,
-  pub token: String,
 }
 
 impl Claims {
-  pub fn for_sub<T>(oid: T, tok: T) -> Self
+  pub fn for_sub<T>(oid: T) -> Self
   where
     T: std::fmt::Display,
   {
@@ -17,12 +17,13 @@ impl Claims {
       .unwrap_or(chrono::Utc::now());
 
     let exp = day.timestamp() as usize;
+    let iat = chrono::Utc::now().timestamp() as usize;
     log::debug!("encoding new jwt, expires {}", exp);
 
     Self {
       exp,
+      iat,
       oid: format!("{}", oid),
-      token: format!("{}", tok),
     }
   }
 

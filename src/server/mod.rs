@@ -7,18 +7,25 @@ use crate::heartbeat::HeartControl;
 
 pub mod auth;
 pub mod control;
+pub mod oauth;
 pub mod sec;
 pub mod webhook;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct StateBuilder {
   sender: Option<Sender<blinkrs::Message>>,
   heart: Option<Sender<HeartControl>>,
+  oauth: Option<oauth::AuthZeroConfig>,
 }
 
 impl StateBuilder {
   pub fn heart(mut self, chan: Sender<HeartControl>) -> Self {
     self.heart = Some(chan);
+    self
+  }
+
+  pub fn oauth(mut self, conf: oauth::AuthZeroConfig) -> Self {
+    self.oauth = Some(conf);
     self
   }
 
@@ -30,7 +37,8 @@ impl StateBuilder {
   pub fn build(self) -> Result<State> {
     let sender = self.sender.ok_or(Error::new(ErrorKind::Other, "missing sender"))?;
     let heart = self.heart.ok_or(Error::new(ErrorKind::Other, "missing heart"))?;
-    Ok(State { sender, heart })
+    let oauth = self.oauth.ok_or(Error::new(ErrorKind::Other, "missing oauth config"))?;
+    Ok(State { sender, heart, oauth })
   }
 }
 
@@ -38,11 +46,16 @@ impl StateBuilder {
 pub struct State {
   sender: Sender<blinkrs::Message>,
   heart: Sender<HeartControl>,
+  oauth: oauth::AuthZeroConfig,
 }
 
 impl State {
   pub fn builder() -> StateBuilder {
     StateBuilder::default()
+  }
+
+  pub fn oauth(&self) -> oauth::AuthZeroConfig {
+    self.oauth.clone()
   }
 }
 

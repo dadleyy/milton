@@ -67,6 +67,7 @@ async fn serve() -> Result<()> {
 
   log::info!("initializing server...");
   let server = obelisk::server::State::builder()
+    .oauth(obelisk::server::oauth::AuthZeroConfig::from_env()?)
     .sender(messages.0.clone())
     .heart(arteries.0)
     .build()?;

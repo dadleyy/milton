@@ -1,12 +1,13 @@
 <CaseOf @kind={{this.model}} as |when|>
   <when.err as |error|>
+    <input type="hidden" value={{error.message}} />
     Something went wrong
   </when.err>
 
   <when.ok as |model|>
     <div class="flex items-start">
       <div class="pr-2">
-        <img src="{{model.snapshotURL}}" alt="" class="block" />
+        <img src="{{model.snapshotURL}}" alt="printer" class="block" />
       </div>
       <div class="pl-2">
         <p>{{model.status.state}}</p>

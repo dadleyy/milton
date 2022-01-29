@@ -1,5 +1,5 @@
-import Application from 'octoprint-blinkrs/app';
-import config from 'octoprint-blinkrs/config/environment';
+import Application from 'milton/app';
+import config from 'milton/config/environment';
 import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import { setup } from 'qunit-dom';

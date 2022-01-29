@@ -45,9 +45,13 @@ module.exports = function (environment) {
 
   if (environment === 'production') {
     ENV.rootURL = process.env['OCTOPRINT_BLINKRS_UI_ROOT'] || ENV.rootURL;
-    ENV.apiConfig.rootURL = process.env['OCTOPRINT_BLINKRS_API_ROOT'] || ENV.apiConfig.rootURL;
-    ENV.apiConfig.loginURL = process.env['OCTOPRINT_BLINKRS_LOGIN_URL'] || ENV.apiConfig.loginURL;
-    ENV.apiConfig.snapshotURL = process.env['OCTOPRINT_BLINKRS_SNAPSHOT_URL'] || ENV.apiConfig.snapshotURL;
+    ENV.apiConfig.rootURL =
+      process.env['OCTOPRINT_BLINKRS_API_ROOT'] || ENV.apiConfig.rootURL;
+    ENV.apiConfig.loginURL =
+      process.env['OCTOPRINT_BLINKRS_LOGIN_URL'] || ENV.apiConfig.loginURL;
+    ENV.apiConfig.snapshotURL =
+      process.env['OCTOPRINT_BLINKRS_SNAPSHOT_URL'] ||
+      ENV.apiConfig.snapshotURL;
   }
 
   return ENV;

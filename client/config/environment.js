@@ -6,9 +6,6 @@ module.exports = function (environment) {
     podModulePrefix: 'octoprint-blinkrs/pods',
     environment,
     rootURL: '/',
-    apiURL: '/',
-    loginURL: 'http://127.0.0.1:8081/auth/start',
-    snapshotURL: 'http://127.0.0.1:8081/control/snapshot',
     locationType: 'history',
 
     apiConfig: {
@@ -34,14 +31,6 @@ module.exports = function (environment) {
     },
   };
 
-  if (environment === 'development') {
-    // ENV.APP.LOG_RESOLVER = true;
-    // ENV.APP.LOG_ACTIVE_GENERATION = true;
-    // ENV.APP.LOG_TRANSITIONS = true;
-    // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
-    // ENV.APP.LOG_VIEW_LOOKUPS = true;
-  }
-
   if (environment === 'test') {
     // Testem prefers this...
     ENV.locationType = 'none';
@@ -55,7 +44,10 @@ module.exports = function (environment) {
   }
 
   if (environment === 'production') {
-    // here you can enable a production-specific feature
+    ENV.rootURL = process.env['OCTOPRINT_BLINKRS_UI_ROOT'] || ENV.rootURL;
+    ENV.apiConfig.rootURL = process.env['OCTOPRINT_BLINKRS_API_ROOT'] || ENV.apiConfig.rootURL;
+    ENV.apiConfig.loginURL = process.env['OCTOPRINT_BLINKRS_LOGIN_URL'] || ENV.apiConfig.loginURL;
+    ENV.apiConfig.snapshotURL = process.env['OCTOPRINT_BLINKRS_SNAPSHOT_URL'] || ENV.apiConfig.snapshotURL;
   }
 
   return ENV;

@@ -7,6 +7,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      OCTOPRINT_BLINKRS_UI_ROOT: "/printing"
+      OCTOPRINT_BLINKRS_API_ROOT: "https://krumpled.com/printing/api"
+      OCTOPRINT_BLINKRS_LOGIN_URL: "https://krumpled.com/printing/api/auth/start"
+      OCTOPRINT_BLINKRS_SNAPSHOT_URL: "https://krumpled.com/printing/api/control/snapshot"
     defaults:
       run:
         working-directory: client

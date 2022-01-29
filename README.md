@@ -1,4 +1,4 @@
-## Octoprint Blinkrs
+## Milton
 
 ```
 /client     <- emberjs frontend source code

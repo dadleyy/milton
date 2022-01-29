@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import * as State from 'octoprint-blinkrs/pods/components/pattern-builder/state';
+import * as State from 'milton/pods/components/pattern-builder/state';
 import debugLogger from 'ember-debug-logger';
 
 const debug = debugLogger('component:pattern-builder');

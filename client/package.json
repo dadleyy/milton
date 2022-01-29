@@ -1,6 +1,6 @@
 {
-  "name": "octoprint-blinkrs",
-  "version": "0.1.3",
+  "name": "milton",
+  "version": "0.2.0",
   "private": true,
   "description": "A emberjs ui for the octoprint blinkr server",
   "repository": "",

@@ -1,14 +1,14 @@
 import Route from '@ember/routing/route';
 import { inject as service } from '@ember/service';
-import Obelisk from 'octoprint-blinkrs/services/obelisk';
-import Session from 'octoprint-blinkrs/services/session';
+import MiltonAPI from 'milton/services/milton-api';
+import Session from 'milton/services/session';
 import debugLogger from 'ember-debug-logger';
 
 const debug = debugLogger('route:home');
 
 class Patterns extends Route {
   @service
-  public obelisk!: Obelisk;
+  public miltonApi!: MiltonAPI;
 
   @service
   public session!: Session;

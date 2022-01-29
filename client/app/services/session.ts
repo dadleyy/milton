@@ -3,7 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import SumType from 'sums-up';
 import * as Seidr from 'seidr';
 import debugLogger from 'ember-debug-logger';
-import config from 'octoprint-blinkrs/config/environment';
+import config from 'milton/config/environment';
 
 const { apiConfig } = config;
 

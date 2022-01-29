@@ -1,10 +1,10 @@
 import Route from '@ember/routing/route';
 import { inject as service } from '@ember/service';
-import Session from 'octoprint-blinkrs/services/session';
-import Obelisk from 'octoprint-blinkrs/services/obelisk';
+import Session from 'milton/services/session';
+import MiltonAPI from 'milton/services/milton-api';
 import * as Seidr from 'seidr';
-import config from 'octoprint-blinkrs/config/environment';
-import * as State from 'octoprint-blinkrs/pods/printer/state';
+import config from 'milton/config/environment';
+import * as State from 'milton/pods/printer/state';
 import debugLogger from 'ember-debug-logger';
 
 const debug = debugLogger('route:home');
@@ -14,7 +14,7 @@ class Home extends Route {
   public session!: Session;
 
   @service
-  public obelisk!: Obelisk;
+  public miltonApi!: MiltonAPI;
 
   public async beforeModel(): Promise<void> {
     const { session } = this;
@@ -29,9 +29,9 @@ class Home extends Route {
   }
 
   public async model(): Promise<Seidr.Result<Error, State.State>> {
-    const { obelisk } = this;
+    const { miltonApi } = this;
     debug('loading home model');
-    const statusResult = await obelisk.query();
+    const statusResult = await miltonApi.query();
     const { snapshotURL } = config.apiConfig;
     return statusResult.map(status => ({ status, snapshotURL }));
   }

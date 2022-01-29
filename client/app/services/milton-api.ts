@@ -1,6 +1,6 @@
 import Service from '@ember/service';
 import * as Seidr from 'seidr';
-import config from 'octoprint-blinkrs/config/environment';
+import config from 'milton/config/environment';
 const { apiConfig } = config;
 
 export type OctoprintStatus = {
@@ -15,7 +15,7 @@ export type OctoprintStatus = {
   state: string;
 };
 
-class Obelisk extends Service {
+class MiltonAPI extends Service {
   public async query(): Promise<Seidr.Result<Error, OctoprintStatus>> {
     try {
       const response = await fetch(`${apiConfig.rootURL}control`);
@@ -26,4 +26,4 @@ class Obelisk extends Service {
   }
 }
 
-export default Obelisk;
+export default MiltonAPI;

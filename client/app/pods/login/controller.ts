@@ -1,5 +1,5 @@
 import Controller from '@ember/controller';
-import config from 'octoprint-blinkrs/config/environment';
+import config from 'milton/config/environment';
 const { apiConfig } = config;
 
 class LoginController extends Controller {

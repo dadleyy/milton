@@ -2,8 +2,8 @@
 
 module.exports = function (environment) {
   let ENV = {
-    modulePrefix: 'octoprint-blinkrs',
-    podModulePrefix: 'octoprint-blinkrs/pods',
+    modulePrefix: 'milton',
+    podModulePrefix: 'milton/pods',
     environment,
     rootURL: '/',
     locationType: 'history',

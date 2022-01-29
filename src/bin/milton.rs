@@ -36,7 +36,7 @@ async fn serve() -> Result<()> {
   let arteries = channel::bounded(1);
 
   log::info!("initializing heart...");
-  let heart = obelisk::heartbeat::Heart::builder()
+  let heart = milton::heartbeat::Heart::builder()
     .sender(messages.0.clone())
     .receiver(arteries.1)
     .patterns(std::env::var("HEARTBEAT_PATTERN_DIR").ok().unwrap_or_default().into())
@@ -53,21 +53,21 @@ async fn serve() -> Result<()> {
         .and_then(|num| num.parse::<u8>().ok())
         .unwrap_or_else(|| {
           log::warn!("HEARTBEAT_LEDN_START not valid, defaulting");
-          obelisk::constants::DEFAULT_LEDN_START
+          milton::constants::DEFAULT_LEDN_START
         }),
       std::env::var("HEARTBEAT_LEDN_END")
         .ok()
         .and_then(|num| num.parse::<u8>().ok())
         .unwrap_or_else(|| {
           log::warn!("HEARTBEAT_LEDN_END not valid, defaulting");
-          obelisk::constants::DEFAULT_LEDN_END
+          milton::constants::DEFAULT_LEDN_END
         }),
     )
     .build()?;
 
   log::info!("initializing server...");
-  let server = obelisk::server::State::builder()
-    .oauth(obelisk::oauth::AuthZeroConfig::from_env()?)
+  let server = milton::server::State::builder()
+    .oauth(milton::oauth::AuthZeroConfig::from_env()?)
     .sender(messages.0.clone())
     .heart(arteries.0)
     .build()?;
@@ -76,23 +76,23 @@ async fn serve() -> Result<()> {
   let wh = async_std::task::spawn(worker(messages.1));
 
   log::info!("spawing heartbeat channel worker thread");
-  let hbh = async_std::task::spawn(obelisk::heartbeat::beat(heart));
+  let hbh = async_std::task::spawn(milton::heartbeat::beat(heart));
 
   let addr = std::env::var("WEBHOOK_LISTENER_ADDR").unwrap_or("0.0.0.0:8081".into());
   log::info!("preparing web thread on addr '{}'", addr);
 
   let mut app = tide::with_state(server);
-  app.at("/incoming-webhook").post(obelisk::server::webhook::hook);
+  app.at("/incoming-webhook").post(milton::server::webhook::hook);
 
-  app.at("/control").post(obelisk::server::control::command);
-  app.at("/control").get(obelisk::server::control::query);
-  app.at("/control/snapshot").get(obelisk::server::control::snapshot);
+  app.at("/control").post(milton::server::control::command);
+  app.at("/control").get(milton::server::control::query);
+  app.at("/control/snapshot").get(milton::server::control::snapshot);
 
-  app.at("/auth/start").get(obelisk::server::auth::start);
-  app.at("/auth/complete").get(obelisk::server::auth::complete);
-  app.at("/auth/identify").get(obelisk::server::auth::identify);
+  app.at("/auth/start").get(milton::server::auth::start);
+  app.at("/auth/complete").get(milton::server::auth::complete);
+  app.at("/auth/identify").get(milton::server::auth::identify);
 
-  app.at("/*").all(obelisk::server::missing);
+  app.at("/*").all(milton::server::missing);
   app.listen(&addr).await?;
 
   wh.await?;

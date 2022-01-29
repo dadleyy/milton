@@ -1,6 +1,6 @@
 import Route from '@ember/routing/route';
 import { inject as service } from '@ember/service';
-import Session from 'octoprint-blinkrs/services/session';
+import Session from 'milton/services/session';
 import debugLogger from 'ember-debug-logger';
 
 const debug = debugLogger('route:login');

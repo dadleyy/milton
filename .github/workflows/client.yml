@@ -33,4 +33,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: octoprint-blinkrs-dist.tar.gz
+          files: ./client/octoprint-blinkrs-dist.tar.gz

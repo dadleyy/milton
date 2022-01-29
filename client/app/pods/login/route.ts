@@ -14,8 +14,8 @@ class Login extends Route {
     const maybeSession = await session.current();
 
     if (maybeSession.getOrElse(undefined) !== undefined) {
-      debug('user already logged in, sending to home');
-      this.transitionTo('home');
+      debug('user already logged in, sending to printer');
+      this.transitionTo('printer');
       return;
     }
   }

@@ -12,5 +12,11 @@ declare const config: {
   rootURL: string;
   apiURL: string;
   loginURL: string;
+  snapshotURL: string;
+  apiConfig: {
+    rootURL: string;
+    snapshotURL: string;
+    loginURL: string;
+  };
   APP: Record<string, unknown>;
 };

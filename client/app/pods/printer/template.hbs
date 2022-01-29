@@ -1,0 +1,16 @@
+<CaseOf @kind={{this.model}} as |when|>
+  <when.err as |error|>
+    Something went wrong
+  </when.err>
+
+  <when.ok as |model|>
+    <div class="flex items-start">
+      <div class="pr-2">
+        <img src="{{model.snapshotURL}}" alt="" class="block" />
+      </div>
+      <div class="pl-2">
+        <p>{{model.status.state}}</p>
+      </div>
+    </div>
+  </when.ok>
+</CaseOf>

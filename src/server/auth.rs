@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use tide::{http::Url, Body, Error, Redirect, Request, Response, Result};
+use serde::Serialize;
+use tide::{Body, Error, Redirect, Request, Response, Result};
 
 use super::{cookie, sec::Claims, State};
 
@@ -9,10 +9,16 @@ const COOKIE_SET_FLAGS: &'static str = "Max-Age=600; Path=/; SameSite=Strict; Ht
 const COOKIE_SET_FLAGS: &'static str = "Max-Age=600; Path=/; SameSite=Strict; HttpOnly; Secure";
 
 #[derive(Debug, Serialize)]
+struct AuthIdentifyResponseUserInfo {
+  user: crate::oauth::ManagementUserInfoResponse,
+  roles: Vec<crate::oauth::UserRole>,
+}
+
+#[derive(Debug, Serialize)]
 struct AuthIdentifyResponse {
   ok: bool,
   timestamp: chrono::DateTime<chrono::Utc>,
-  user: Option<UserInfo>,
+  session: Option<AuthIdentifyResponseUserInfo>,
 }
 
 impl Default for AuthIdentifyResponse {
@@ -20,98 +26,9 @@ impl Default for AuthIdentifyResponse {
     Self {
       ok: false,
       timestamp: chrono::Utc::now(),
-      user: None,
+      session: None,
     }
   }
-}
-
-#[derive(Debug, Deserialize)]
-struct AuthCodeResponse {
-  access_token: String,
-}
-
-#[derive(Debug, Serialize)]
-struct AuthCodeRequest {
-  grant_type: String,
-  client_id: String,
-  client_secret: String,
-  redirect_uri: String,
-  code: String,
-}
-
-impl Default for AuthCodeRequest {
-  fn default() -> Self {
-    let client_id = std::env::var("AUTH_0_CLIENT_ID").ok().unwrap_or_else(|| {
-      log::warn!("missing auth 0 client id");
-      String::default()
-    });
-    let redirect_uri = std::env::var("AUTH_0_REDIRECT_URI").ok().unwrap_or_else(|| {
-      log::warn!("missing auth 0 redirect uri");
-      String::default()
-    });
-    let client_secret = std::env::var("AUTH_0_CLIENT_SECRET").ok().unwrap_or_else(|| {
-      log::warn!("missing auth 0 client secret");
-      String::default()
-    });
-
-    AuthCodeRequest {
-      client_id,
-      client_secret,
-      redirect_uri,
-      code: "".into(),
-      grant_type: "authorization_code".into(),
-    }
-  }
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct UserInfo {
-  pub sub: String,
-  pub nickname: String,
-  pub email: String,
-  pub picture: String,
-  pub email_verified: Option<bool>,
-}
-
-pub async fn fetch_user<T>(token: T) -> Option<UserInfo>
-where
-  T: std::fmt::Display,
-{
-  let uri = std::env::var("AUTH_0_USERINFO_URI").unwrap_or_else(|error| {
-    log::warn!("missing auth0 userinfo uri in environment - {}", error);
-    "".into()
-  });
-
-  let mut res = surf::get(&uri)
-    .header("Authorization", format!("Bearer {}", token))
-    .await
-    .ok()?;
-
-  if res.status() != surf::StatusCode::Ok {
-    log::warn!("bad response status - '{:?}'", res.status());
-    return None;
-  }
-
-  log::debug!("loaded info with status '{}', attempting to parse", res.status());
-  res.body_json::<UserInfo>().await.ok()
-}
-
-async fn token_from_response(response: &mut surf::Response) -> Option<String> {
-  let status = response.status();
-
-  match status {
-    surf::StatusCode::Ok => log::debug!("good response from auth provider token api"),
-    other => {
-      log::warn!("bad status code from token response - '{:?}'", other);
-      return None;
-    }
-  };
-
-  response
-    .body_json::<AuthCodeResponse>()
-    .await
-    .ok()
-    .map(|body| body.access_token)
 }
 
 pub async fn identify(request: Request<State>) -> Result {
@@ -120,13 +37,18 @@ pub async fn identify(request: Request<State>) -> Result {
     Claims::decode(&cook.value()).ok()
   });
 
-  log::debug!("attempting to identify user from claims - {:?}", claims);
+  log::info!("attempting to identify user from claims - {:?}", claims);
   let mut res = AuthIdentifyResponse::default();
+  let oauth = request.state().oauth();
 
   if let Some(claims) = claims {
-    let user = fetch_user("hello").await;
-    res.ok = user.is_some();
-    res.user = user;
+    let user = oauth.fetch_detailed_user_info(&claims.oid).await.ok();
+    let roles = oauth.fetch_user_roles(&claims.oid).await.ok().unwrap_or_default();
+
+    if roles.iter().any(|role| role.is_admin()) {
+      res.ok = user.is_some();
+      res.session = user.map(|user| AuthIdentifyResponseUserInfo { user, roles });
+    }
   }
 
   Body::from_json(&res).map(|bod| Response::builder(200).body(bod).build())
@@ -140,32 +62,30 @@ pub async fn complete(request: Request<State>) -> Result {
     .ok_or(Error::from_str(404, "no-code"))?;
 
   let oauth = request.state().oauth();
-
-  // Attempt top exchange our code with the oAuth provider for a token.
-  let payload = oauth.auth_token_payload(&String::from(code))?;
-  log::info!("requesting token - {:?}", payload);
-  let destination = oauth.token_uri().map_err(|error| {
-    log::warn!("missing auth 0 token url environment - {}", error);
+  let user = oauth.fetch_initial_user_info(&code).await.map_err(|error| {
+    log::warn!("unable to fetch initial user info - {}", error);
     Error::from_str(500, "bad-oauth")
   })?;
-
-  let mut response = surf::post(&destination).body_json(&payload)?.await?;
-  let token = token_from_response(&mut response).await.ok_or_else(|| {
-    log::warn!("unable to parse token from response");
-    Error::from_str(404, "token-exchange")
-  })?;
-
-  let user = fetch_user(&token).await.ok_or(Error::from_str(404, "user-not-found"))?;
 
   if user.email_verified.unwrap_or(false) != true {
     log::warn!("user email not verified for sub '{}'", user.sub);
     return Err(Error::from_str(404, "user-not-found"));
   }
 
+  let roles = oauth.fetch_user_roles(&user.sub).await.map_err(|error| {
+    log::warn!("unable to fetch user roles - {}", error);
+    Error::from_str(500, "bad-roles-listing")
+  })?;
+
+  if roles.iter().any(|role| role.is_admin()) != true {
+    log::warn!("user not admin, skippping cookie setting (roles {:?})", roles);
+    return Err(Error::from_str(404, "user-not-found"));
+  }
+
+  log::info!("found user roles - {:?}", roles);
+
   let jwt = Claims::for_sub(&user.sub).encode()?;
-
   let cookie = format!("{}={}; {}", "_obs", jwt, COOKIE_SET_FLAGS);
-
   let destination = std::env::var("CLIENT_AUTH_COMPLETE_URI").ok().unwrap_or_else(|| {
     log::warn!("missing client auth completion uri");
     "/auth/identify".into()

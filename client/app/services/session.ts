@@ -5,19 +5,24 @@ import * as Seidr from 'seidr';
 import debugLogger from 'ember-debug-logger';
 import config from 'octoprint-blinkrs/config/environment';
 
+const { apiConfig } = config;
+
 const debug = debugLogger('service:session');
 
 type IdentifyUserInfo = {
-  sub: string;
-  picture: string;
-  nickname: string;
-  email: string;
+  roles: Array<{ id: string, name: string }>;
+  user: {
+    user_id: string;
+    picture: string;
+    nickname: string;
+    email: string;
+  };
 };
 
 type IdentifyResponse = {
   ok: boolean;
   timestamp: string;
-  user?: IdentifyUserInfo;
+  session?: IdentifyUserInfo;
 };
 
 class SessionState extends SumType<{ NotRequested: []; Available: [IdentifyUserInfo]; NotAvailable: []; }> {
@@ -44,10 +49,10 @@ class Session extends Service {
 
     return session.caseOf({
       NotRequested: async () => {
-        debug('session not yet requested, attempting to load from "%s"', config.apiURL);
+        debug('session not yet requested, attempting to load from "%s"', apiConfig.rootURL);
 
         try {
-          const response = await fetch(`${config.apiURL}auth/identify`);
+          const response = await fetch(`${apiConfig.rootURL}auth/identify`);
 
           if (response.status != 200) {
             debug('invalid response status code, skipping');
@@ -56,7 +61,7 @@ class Session extends Service {
           }
 
           const payload: IdentifyResponse = await response.json();
-          const user = Seidr.Maybe.fromNullable(payload.user);
+          const user = Seidr.Maybe.fromNullable(payload.session);
           this._session = user.map(Available).getOrElse(NotAvailable());
           return user;
         } catch (error) {

@@ -3,11 +3,10 @@ use std::io::{Error, ErrorKind, Result};
 use async_std::channel::Sender;
 use tide::{http::Cookie, Request, Response};
 
-use crate::heartbeat::HeartControl;
+use crate::{heartbeat::HeartControl, oauth};
 
 pub mod auth;
 pub mod control;
-pub mod oauth;
 pub mod sec;
 pub mod webhook;
 

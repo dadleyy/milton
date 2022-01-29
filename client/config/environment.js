@@ -8,7 +8,15 @@ module.exports = function (environment) {
     rootURL: '/',
     apiURL: '/',
     loginURL: 'http://127.0.0.1:8081/auth/start',
+    snapshotURL: 'http://127.0.0.1:8081/control/snapshot',
     locationType: 'history',
+
+    apiConfig: {
+      rootURL: '/',
+      loginURL: 'http://127.0.0.1:8081/auth/start',
+      snapshotURL: 'http://127.0.0.1:8081/control/snapshot',
+    },
+
     EmberENV: {
       FEATURES: {
         // Here you can enable experimental features on an ember canary build

@@ -27,6 +27,35 @@ struct ControlQuery {
   pattern: Option<String>,
 }
 
+pub async fn snapshot(request: Request<State>) -> Result {
+  let claims = super::cookie(&request)
+    .and_then(|cook| Claims::decode(&cook.value()).ok())
+    .ok_or_else(|| {
+      log::warn!("unauthorized attempt to query state");
+      tide::Error::from_str(404, "not-found")
+    })?;
+
+  log::info!("fetching snapshot for user {}", claims.oid);
+
+  let response = surf::get(std::env::var("OCTOPRINT_SNAPSHOT_URL").map_err(|error| {
+    log::warn!("unable to find OCTOPRINT_SNAPSHOT_URL in env - {}", error);
+    tide::Error::from_str(404, "not-found")
+  })?)
+  .await
+  .map_err(|error| {
+    log::warn!("unable to request snapshot - {}", error);
+    tide::Error::from_str(404, "not-found")
+  })?;
+
+  let size = response.len();
+  Ok(
+    tide::Response::builder(200)
+      .content_type(tide::http::mime::JPEG)
+      .body(tide::Body::from_reader(response, size))
+      .build(),
+  )
+}
+
 pub async fn query(req: Request<State>) -> Result {
   super::cookie(&req)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
@@ -66,8 +95,7 @@ pub async fn query(req: Request<State>) -> Result {
   })?;
 
   log::info!("requested octoprint current job info - {:?}", infos);
-
-  Ok("".into())
+  tide::Body::from_json(&infos).map(|bod| Response::builder(200).body(bod).build())
 }
 
 pub async fn command(mut req: Request<State>) -> Result {

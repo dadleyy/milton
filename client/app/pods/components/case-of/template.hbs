@@ -1,0 +1,7 @@
+{{yield
+  (from-entries
+    (array
+      (array (camelize (if @kind.kind @kind.kind '')) (component 'case-of/yield' data=@kind.data))
+    )
+  )
+}}

@@ -67,7 +67,7 @@ async fn serve() -> Result<()> {
 
   log::info!("initializing server...");
   let server = obelisk::server::State::builder()
-    .oauth(obelisk::server::oauth::AuthZeroConfig::from_env()?)
+    .oauth(obelisk::oauth::AuthZeroConfig::from_env()?)
     .sender(messages.0.clone())
     .heart(arteries.0)
     .build()?;
@@ -86,6 +86,7 @@ async fn serve() -> Result<()> {
 
   app.at("/control").post(obelisk::server::control::command);
   app.at("/control").get(obelisk::server::control::query);
+  app.at("/control/snapshot").get(obelisk::server::control::snapshot);
 
   app.at("/auth/start").get(obelisk::server::auth::start);
   app.at("/auth/complete").get(obelisk::server::auth::complete);

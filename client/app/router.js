@@ -7,7 +7,7 @@ export default class Router extends EmberRouter {
 }
 
 Router.map(function () {
-  this.route('home');
+  this.route('printer');
   this.route('patterns');
   this.route('login');
   this.route('missing', { path: '*' });

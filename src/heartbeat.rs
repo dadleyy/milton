@@ -316,7 +316,7 @@ pub async fn beat(heart: Heart) -> Result<()> {
       }
     }
 
-    log::info!("entering frame '#{}'", cursor);
+    log::debug!("entering frame '#{}'", cursor);
 
     for message in cursor.messages().into_iter() {
       if let Err(error) = heart.sender.send(message).await {

@@ -31,6 +31,7 @@ impl Default for AuthIdentifyResponse {
   }
 }
 
+// ROUTE: attempts to fetch user information from cookie.
 pub async fn identify(request: Request<State>) -> Result {
   let claims = cookie(&request).and_then(|cook| {
     log::info!("found cookie - {:?}", cook.value());
@@ -54,6 +55,7 @@ pub async fn identify(request: Request<State>) -> Result {
   Body::from_json(&res).map(|bod| Response::builder(200).body(bod).build())
 }
 
+// ROUTE: callback for oauth, completes cookie storage.
 pub async fn complete(request: Request<State>) -> Result {
   let code = request
     .url()
@@ -77,6 +79,7 @@ pub async fn complete(request: Request<State>) -> Result {
     Error::from_str(500, "bad-roles-listing")
   })?;
 
+  // TODO: should non-admins be allowed to see info?
   if roles.iter().any(|role| role.is_admin()) != true {
     log::warn!("user not admin, skippping cookie setting (roles {:?})", roles);
     return Err(Error::from_str(404, "user-not-found"));
@@ -101,6 +104,7 @@ pub async fn complete(request: Request<State>) -> Result {
   Ok(response)
 }
 
+// ROUTE: simple redirect, starts oauth flow.
 pub async fn start(request: Request<State>) -> Result {
   log::info!("initializing oauth redirect");
   let destination = request.state().oauth().redirect_uri().map_err(|error| {

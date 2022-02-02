@@ -8,10 +8,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      OCTOPRINT_BLINKRS_UI_ROOT: "/printing"
-      OCTOPRINT_BLINKRS_API_ROOT: "https://krumpled.com/printing/api/"
-      OCTOPRINT_BLINKRS_LOGIN_URL: "https://krumpled.com/printing/api/auth/start"
-      OCTOPRINT_BLINKRS_SNAPSHOT_URL: "https://krumpled.com/printing/api/control/snapshot"
+      MILTON_UI_ROOT: "/printing"
+      MILTON_API_ROOT: "https://krumpled.com/printing/api/"
+      MILTON_LOGIN_URL: "https://krumpled.com/printing/api/auth/start"
+      MILTON_SNAPSHOT_URL: "https://krumpled.com/printing/api/control/snapshot"
     defaults:
       run:
         working-directory: client
@@ -26,11 +26,11 @@ jobs:
       - run: npm run lint:hbs
       - run: npm run build
       - name: rename-bundle
-        run: mv dist octoprint-blinkrs-dist
+        run: mv dist milton-dist
       - name: create-bundle
-        run: tar cvzf octoprint-blinkrs-dist.tar.gz octoprint-blinkrs-dist
+        run: tar cvzf milton-dist.tar.gz milton-dist
       - name: release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ./client/octoprint-blinkrs-dist.tar.gz
+          files: ./client/milton-dist.tar.gz

@@ -148,6 +148,8 @@ impl AuthZeroConfig {
         Error::new(ErrorKind::Other, format!("{}", error))
       })?;
 
+    log::debug!("request for roles completed - {}", response.status());
+
     response.body_json::<Vec<UserRole>>().await.map_err(|error| {
       log::warn!("unable to parse user role response - {}", error);
       Error::new(ErrorKind::Other, format!("{}", error))

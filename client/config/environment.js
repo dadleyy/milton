@@ -1,5 +1,12 @@
 'use strict';
 
+const dotenv = require('dotenv');
+try {
+  dotenv.config();
+} catch (error) {
+  // Todo.
+}
+
 module.exports = function (environment) {
   let ENV = {
     modulePrefix: 'milton',
@@ -10,8 +17,11 @@ module.exports = function (environment) {
 
     apiConfig: {
       rootURL: '/',
-      loginURL: 'http://127.0.0.1:8081/auth/start',
-      snapshotURL: 'http://127.0.0.1:8081/control/snapshot',
+      loginURL:
+        process.env['MILTON_LOGIN_URL'] || 'http://127.0.0.1:8081/auth/start',
+      snapshotURL:
+        process.env['MILTON_SNAPSHOT_URL'] ||
+        'http://127.0.0.1:8081/control/snapshot',
     },
 
     EmberENV: {
@@ -44,14 +54,13 @@ module.exports = function (environment) {
   }
 
   if (environment === 'production') {
-    ENV.rootURL = process.env['OCTOPRINT_BLINKRS_UI_ROOT'] || ENV.rootURL;
+    ENV.rootURL = process.env['MILTON_UI_ROOT'] || ENV.rootURL;
     ENV.apiConfig.rootURL =
-      process.env['OCTOPRINT_BLINKRS_API_ROOT'] || ENV.apiConfig.rootURL;
+      process.env['MILTON__API_ROOT'] || ENV.apiConfig.rootURL;
     ENV.apiConfig.loginURL =
-      process.env['OCTOPRINT_BLINKRS_LOGIN_URL'] || ENV.apiConfig.loginURL;
+      process.env['MILTON_LOGIN_URL'] || ENV.apiConfig.loginURL;
     ENV.apiConfig.snapshotURL =
-      process.env['OCTOPRINT_BLINKRS_SNAPSHOT_URL'] ||
-      ENV.apiConfig.snapshotURL;
+      process.env['MILTON_SNAPSHOT_URL'] || ENV.apiConfig.snapshotURL;
   }
 
   return ENV;

@@ -23,10 +23,10 @@ impl Default for ControlResponse {
 #[derive(Default, Debug, Deserialize)]
 struct ControlQuery {
   mode: String,
-  code: String,
   pattern: Option<String>,
 }
 
+// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
 pub async fn snapshot(request: Request<State>) -> Result {
   let claims = super::cookie(&request)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
@@ -56,6 +56,7 @@ pub async fn snapshot(request: Request<State>) -> Result {
   )
 }
 
+// ROUTE: fetches current job information from octoprint api
 pub async fn query(req: Request<State>) -> Result {
   super::cookie(&req)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
@@ -98,25 +99,26 @@ pub async fn query(req: Request<State>) -> Result {
   tide::Body::from_json(&infos).map(|bod| Response::builder(200).body(bod).build())
 }
 
+// ROUTE: sends command to heartbeat/light controls.
 pub async fn command(mut req: Request<State>) -> Result {
-  super::cookie(&req)
+  let claims = super::cookie(&req)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
     .ok_or_else(|| {
       log::warn!("unauthorized attempt to commit command");
       tide::Error::from_str(404, "not-found")
     })?;
 
+  req.state().authority(&claims.oid).await.ok_or_else(|| {
+    log::warn!("unauthorized attempt to commit command");
+    tide::Error::from_str(404, "not-found")
+  })?;
+
   let query = req.body_json::<ControlQuery>().await.map_err(|error| {
     log::warn!("uanble to parse control payload - {}", error);
     tide::Error::from_str(422, "bad-payload")
   })?;
 
-  let actual = std::env::var("HEARTBEAT_SECRET_CODE").unwrap_or_default();
-
-  if actual != query.code {
-    log::warn!("unauthorized attempt to set heartbeat");
-    return Ok(Response::builder(404).body("not-found").build());
-  }
+  log::debug!("received control request - {:?}", query);
 
   let result = match query.mode.as_str() {
     "off" => req.state().heart.send(HeartControl::Stop).await.map(|_| ()),

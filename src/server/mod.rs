@@ -5,10 +5,15 @@ use tide::{http::Cookie, Request, Response};
 
 use crate::{heartbeat::HeartControl, oauth};
 
+mod sec;
+
 pub mod auth;
 pub mod control;
-pub mod sec;
 pub mod webhook;
+
+pub enum Authority {
+  Admin,
+}
 
 #[derive(Default, Clone)]
 pub struct StateBuilder {
@@ -51,6 +56,18 @@ pub struct State {
 impl State {
   pub fn builder() -> StateBuilder {
     StateBuilder::default()
+  }
+
+  pub async fn authority<T>(&self, id: T) -> Option<Authority>
+  where
+    T: std::fmt::Display,
+  {
+    let oauth = self.oauth();
+    let roles = oauth.fetch_user_roles(id).await.ok()?;
+    if roles.into_iter().any(|role| role.is_admin()) {
+      return Some(Authority::Admin);
+    }
+    return None;
   }
 
   pub fn oauth(&self) -> oauth::AuthZeroConfig {

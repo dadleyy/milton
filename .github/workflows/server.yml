@@ -21,8 +21,21 @@ jobs:
         run: rustup target add aarch64-unknown-linux-gnu
       - name: add-rust-target-components
         run: rustup component add --target aarch64-unknown-linux-gnu rust-src rust-std rustc-dev
+      - name: download-openssl
+        run: cd /tmp && wget https://www.openssl.org/source/openssl-1.1.1g.tar.gz
+      - name: extract-openssl
+        run: cd /tmp && tar xzf openssl-1.1.1g.tar.gz
+      - name: configure-openssl
+        run: cd /tmp/openssl-1.1.1g && ./config shared
+        env:
+          MACHINE: aarch64
+          ARCH: arm
+          CC: aarch64-linux-gnu-gcc
       - name: build
         run: cargo build --target aarch64-unknown-linux-gnu --release
+        env:
+          OPENSSL_LIB_DIR: /tmp/openssl-1.1.1g/
+          OPENSSL_INCLUDE_DIR: /tmp/openssl-1.1.1g/include
       - name: rename-bundle
         run: mv target/release milton-server-dist
       - name: create-bundle

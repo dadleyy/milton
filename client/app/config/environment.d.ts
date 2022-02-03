@@ -10,6 +10,7 @@ declare const config: {
   podModulePrefix: string;
   locationType: string;
   rootURL: string;
+  version: string;
   apiConfig: {
     rootURL: string;
     snapshotURL: string;

@@ -45,7 +45,7 @@ jobs:
       - name: prepare-bundle
         run: mkdir -p milton-server-dist/bin
       - name: populate-bundle
-        run: mv target/release/milton milton-server-dist/bin/milton
+        run: cp target/aarch64-unknown-linux-gnu/release/milton milton-server-dist/bin/milton
       - name: create-bundle
         run: tar cvzf milton-server-aarch64-unknown-linux-gnu-$MILTON_VERSION.tar.gz milton-server-dist
       - name: release

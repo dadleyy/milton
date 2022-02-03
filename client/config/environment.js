@@ -15,6 +15,8 @@ module.exports = function (environment) {
     rootURL: '/',
     locationType: 'history',
 
+    version: process.env['MILTON_VERSION'] || 'dev',
+
     apiConfig: {
       rootURL: '/',
       loginURL:
@@ -56,7 +58,7 @@ module.exports = function (environment) {
   if (environment === 'production') {
     ENV.rootURL = process.env['MILTON_UI_ROOT'] || ENV.rootURL;
     ENV.apiConfig.rootURL =
-      process.env['MILTON__API_ROOT'] || ENV.apiConfig.rootURL;
+      process.env['MILTON_API_ROOT'] || ENV.apiConfig.rootURL;
     ENV.apiConfig.loginURL =
       process.env['MILTON_LOGIN_URL'] || ENV.apiConfig.loginURL;
     ENV.apiConfig.snapshotURL =

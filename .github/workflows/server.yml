@@ -42,8 +42,10 @@ jobs:
         env:
           OPENSSL_LIB_DIR: /tmp/openssl-1.1.1g/
           OPENSSL_INCLUDE_DIR: /tmp/openssl-1.1.1g/include
-      - name: rename-bundle
-        run: mv target/release milton-server-dist
+      - name: prepare-bundle
+        run: mkdir -p milton-server-dist/bin
+      - name: populate-bundle
+        run: mv target/release/milton milton-server-dist/bin/milton
       - name: create-bundle
         run: tar cvzf milton-server-aarch64-unknown-linux-gnu-$MILTON_VERSION.tar.gz milton-server-dist
       - name: release

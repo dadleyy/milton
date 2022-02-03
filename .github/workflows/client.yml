@@ -8,7 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      MILTON_VERSION: "${{ env.GITHUB_SHA }}"
+      MILTON_VERSION: "${{ github.sha }}"
       MILTON_UI_ROOT: "/printing"
       MILTON_API_ROOT: "https://krumpled.com/printing/api/"
       MILTON_LOGIN_URL: "https://krumpled.com/printing/api/auth/start"

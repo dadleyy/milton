@@ -10,7 +10,8 @@ class ApplicationRoute extends Route {
   }
 
   public model(): { version: string } {
-    return { version: config.version };
+    const version = (config.version || '').slice(0, 7);
+    return { version };
   }
 }
 

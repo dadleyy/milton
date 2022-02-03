@@ -31,6 +31,12 @@ jobs:
           MACHINE: aarch64
           ARCH: arm
           CC: aarch64-linux-gnu-gcc
+      - name: build-openssl
+        run: cd /tmp/openssl-1.1.1g && make
+        env:
+          MACHINE: armv7
+          ARCH: arm
+          CC: aarch64-linux-gnu-gcc
       - name: build
         run: cargo build --target aarch64-unknown-linux-gnu --release
         env:

@@ -3,7 +3,7 @@ use std::io::{Error, ErrorKind, Result};
 use async_std::channel::Sender;
 use tide::{http::Cookie, Request, Response};
 
-use crate::{heartbeat::HeartControl, oauth};
+use crate::{auth_zero, heartbeat::HeartControl};
 
 mod sec;
 
@@ -19,7 +19,7 @@ pub enum Authority {
 pub struct StateBuilder {
   sender: Option<Sender<blinkrs::Message>>,
   heart: Option<Sender<HeartControl>>,
-  oauth: Option<oauth::AuthZeroConfig>,
+  oauth: Option<auth_zero::AuthZeroConfig>,
 }
 
 impl StateBuilder {
@@ -28,7 +28,7 @@ impl StateBuilder {
     self
   }
 
-  pub fn oauth(mut self, conf: oauth::AuthZeroConfig) -> Self {
+  pub fn oauth(mut self, conf: auth_zero::AuthZeroConfig) -> Self {
     self.oauth = Some(conf);
     self
   }
@@ -50,7 +50,7 @@ impl StateBuilder {
 pub struct State {
   sender: Sender<blinkrs::Message>,
   heart: Sender<HeartControl>,
-  oauth: oauth::AuthZeroConfig,
+  oauth: auth_zero::AuthZeroConfig,
 }
 
 impl State {
@@ -64,17 +64,16 @@ impl State {
   {
     let oauth = self.oauth();
     let roles = oauth.fetch_user_roles(id).await.ok()?;
-    if roles.into_iter().any(|role| role.is_admin()) {
-      return Some(Authority::Admin);
-    }
-    return None;
+    roles.into_iter().find(|role| role.is_admin()).map(|_| Authority::Admin)
   }
 
-  pub fn oauth(&self) -> oauth::AuthZeroConfig {
+  #[inline]
+  pub fn oauth(&self) -> auth_zero::AuthZeroConfig {
     self.oauth.clone()
   }
 }
 
+#[inline]
 pub fn cookie(request: &Request<State>) -> Option<Cookie<'static>> {
   request
     .header("Cookie")

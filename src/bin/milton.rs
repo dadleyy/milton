@@ -67,7 +67,7 @@ async fn serve() -> Result<()> {
 
   log::info!("initializing server...");
   let server = milton::server::State::builder()
-    .oauth(milton::oauth::AuthZeroConfig::from_env()?)
+    .oauth(milton::auth_zero::AuthZeroConfig::from_env()?)
     .sender(messages.0.clone())
     .heart(arteries.0)
     .build()?;

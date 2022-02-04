@@ -60,21 +60,21 @@ struct ControlQuery {
   pattern: Option<String>,
 }
 
+#[inline]
 fn parse_hex(input: &String) -> Option<(u8, u8, u8)> {
-  let mut results = (1..input.len())
+  let mut it = input
+    .chars()
     .step_by(2)
-    .map(|i| u8::from_str_radix(&input[i..i + 2], 16).ok())
-    .flatten()
-    .collect::<Vec<u8>>();
+    .skip(1)
+    .enumerate()
+    .map(|(indx, _)| input[(indx * 2) + 1..(indx * 2) + 3].to_string())
+    .map(|val| u8::from_str_radix(&val, 16).ok())
+    .flatten();
 
-  results
-    .pop()
-    .zip(results.pop())
-    .zip(results.pop())
-    .map(|((r, g), b)| (r, g, b))
+  it.next().zip(it.next()).zip(it.next()).map(|((r, g), b)| (r, g, b))
 }
 
-// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
+// ROUTE: attempt to create a new pattern.
 pub async fn write_pattern(mut request: Request<State>) -> Result {
   let oid = super::cookie(&request)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
@@ -263,4 +263,39 @@ pub async fn command(mut req: Request<State>) -> Result {
   }
 
   tide::Body::from_json(&ControlResponse::default()).map(|bod| Response::builder(200).body(bod).build())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::parse_hex;
+
+  #[test]
+  fn test_parse_hex_bad_empty() {
+    assert_eq!(parse_hex(&"".to_string()), None);
+  }
+
+  #[test]
+  fn test_parse_hex_bad_odd() {
+    assert_eq!(parse_hex(&"zzz".to_string()), None);
+  }
+
+  #[test]
+  fn test_parse_hex_bad_not_hex() {
+    assert_eq!(parse_hex(&"zzzzzz".to_string()), None);
+  }
+
+  #[test]
+  fn test_parse_hex_red() {
+    assert_eq!(parse_hex(&"#ff0000".to_string()), Some((255, 0, 0)));
+  }
+
+  #[test]
+  fn test_parse_hex_green() {
+    assert_eq!(parse_hex(&"#00ff00".to_string()), Some((0, 255, 0)));
+  }
+
+  #[test]
+  fn test_parse_hex_blue() {
+    assert_eq!(parse_hex(&"#0000ff".to_string()), Some((0, 0, 255)));
+  }
 }

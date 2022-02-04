@@ -10,8 +10,8 @@ const COOKIE_SET_FLAGS: &'static str = "Max-Age=3600; Path=/; SameSite=Strict; H
 
 #[derive(Debug, Serialize)]
 struct AuthIdentifyResponseUserInfo {
-  user: crate::oauth::ManagementUserInfoResponse,
-  roles: Vec<crate::oauth::UserRole>,
+  user: crate::auth_zero::ManagementUserInfoResponse,
+  roles: Vec<crate::auth_zero::UserRole>,
 }
 
 #[derive(Debug, Serialize)]

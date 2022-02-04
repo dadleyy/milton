@@ -1,6 +1,7 @@
 import Controller from '@ember/controller';
 import { inject as service } from '@ember/service';
 import { action } from '@ember/object';
+import { later, cancel } from '@ember/runloop';
 import debugLogger from 'ember-debug-logger';
 import MiltonAPI from 'milton/services/milton-api';
 
@@ -11,16 +12,15 @@ class PrinterController extends Controller {
   public miltonApi!: MiltonAPI;
 
   @action
-  public async refreshSnapshot(element: HTMLImageElement): Promise<void> {
-    const { src } = element;
-    debug('starting snapshot polling on element %o', element);
+  public async stopRefresh(): Promise<void> {
+    debug('terminating refresh');
+    // @ts-ignore
+    cancel(this.refreshTimeout);
+  }
 
-    while (!this.isDestroyed) {
-      const ts = new Date();
-      const id = btoa(ts.getTime() + '');
-      element.src = `${src}?t=${id}`;
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+  @action
+  public async refreshSnapshot(element: HTMLImageElement): Promise<void> {
+    this.poll(element, element.src);
   }
 
   @action
@@ -33,6 +33,15 @@ class PrinterController extends Controller {
       Err: error => debug('[warning] unable to toggle - %s', error),
       Ok: () => debug('successfully toggled light'),
     });
+  }
+
+  private poll(element: HTMLImageElement, originalSource: string): void {
+    debug('starting snapshot polling on element %o', element);
+    const ts = new Date();
+    const id = btoa(ts.getTime() + '');
+    element.src = `${originalSource}?t=${id}`;
+    // @ts-ignore
+    this.refreshTimeout = later(() => this.poll(element, originalSource), 1000);
   }
 }
 

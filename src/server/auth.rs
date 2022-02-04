@@ -4,9 +4,9 @@ use tide::{Body, Error, Redirect, Request, Response, Result};
 use super::{cookie, sec::Claims, State};
 
 #[cfg(debug_assertions)]
-const COOKIE_SET_FLAGS: &'static str = "Max-Age=600; Path=/; SameSite=Strict; HttpOnly";
+const COOKIE_SET_FLAGS: &'static str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly";
 #[cfg(not(debug_assertions))]
-const COOKIE_SET_FLAGS: &'static str = "Max-Age=600; Path=/; SameSite=Strict; HttpOnly; Secure";
+const COOKIE_SET_FLAGS: &'static str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly; Secure";
 
 #[derive(Debug, Serialize)]
 struct AuthIdentifyResponseUserInfo {

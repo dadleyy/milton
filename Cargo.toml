@@ -1,6 +1,6 @@
 [package]
 name = "milton"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 publish = false
 
@@ -16,6 +16,7 @@ path = "src/bin/milton.rs"
 dotenv = { version = "0.15.0" }
 env_logger = { version = "^0.9.0" }
 log = { version = "^0.4.1" }
+uuid = { version = "^0.8", features = ["v4"] }
 tide = { version = "^0.16.0" }
 blinkrs = { version = "^2.0" }
 async-std = { version = "1.6.0", features = ["attributes"] }

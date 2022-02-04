@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import * as State from 'milton/pods/components/pattern-builder/state';
 import debugLogger from 'ember-debug-logger';
@@ -8,11 +7,14 @@ const debug = debugLogger('component:pattern-builder');
 
 type PatternBuilderArgs = {
   ledr: [number, number];
+  state: State.State;
+  onChange: (state: State.State) => void;
 };
 
 class PatternBuilder extends Component<PatternBuilderArgs> {
-  @tracked
-  public state: State.State = State.empty();
+  public get state(): State.State {
+    return this.args.state;
+  }
 
   @action
   public setColor(location: [number, number], event: InputEvent): void {
@@ -21,14 +23,15 @@ class PatternBuilder extends Component<PatternBuilderArgs> {
     const value = target.value;
     const [fi, ledn] = location;
     debug('setting frame[%s] led[%s] - "%s"', fi, ledn, value);
-    this.state = State.setColor(state, fi, { ledn, hex: value });
+    this.args.onChange(State.setColor(state, fi, { ledn, hex: value }));
   }
 
   @action
   public addFrame(): void {
     const { state, args } = this;
     debug('adding new frame');
-    this.state = State.addFrame(state, args.ledr || [2, 4])
+    const next = State.addFrame(state, args.ledr || [2, 4])
+    this.args.onChange(next);
   }
 }
 

@@ -87,6 +87,7 @@ async fn serve() -> Result<()> {
   app.at("/control").post(milton::server::control::command);
   app.at("/control").get(milton::server::control::query);
   app.at("/control/snapshot").get(milton::server::control::snapshot);
+  app.at("/control/pattern").post(milton::server::control::write_pattern);
 
   app.at("/auth/start").get(milton::server::auth::start);
   app.at("/auth/complete").get(milton::server::auth::complete);

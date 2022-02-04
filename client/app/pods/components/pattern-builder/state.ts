@@ -1,3 +1,5 @@
+export const BLACK = '#000000';
+
 export type LedState = {
   ledn: number;
   hex: string;
@@ -19,7 +21,7 @@ function emptyColorsForRange(range: [number, number]): Array<LedState> {
   const out = [];
 
   for (let i = range[0]; i <= range[1]; i++) {
-    out.push({ hex: '#ff0000', ledn: i });
+    out.push({ hex: BLACK, ledn: i });
   }
 
   return out;
@@ -39,6 +41,10 @@ export function setColor(state: State, fi: number, led: LedState): State {
     ...state,
     frames,
   };
+}
+
+export function hasFrames(state: State): boolean {
+  return state.frames.length > 0;
 }
 
 export function addFrame(state: State, range: [number, number]): State {

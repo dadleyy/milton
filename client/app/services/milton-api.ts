@@ -2,6 +2,7 @@ import Service from '@ember/service';
 import * as Seidr from 'seidr';
 import config from 'milton/config/environment';
 import debugLogger from 'ember-debug-logger';
+import * as State from 'milton/pods/components/pattern-builder/state';
 
 const debug = debugLogger('service:milton-api');
 const { apiConfig } = config;
@@ -24,6 +25,25 @@ export type OctoprintStatus = {
 };
 
 class MiltonAPI extends Service {
+  private async post<T>(url: string, body: string): Promise<Seidr.Result<Error, T>> {
+    const parameters = { ...POST_CONFIG, body };
+
+    try {
+      const response = await fetch(`${apiConfig.rootURL}${url}`, parameters);
+      if (response.status !== 200) {
+        return Seidr.Err(new Error(`bad response - ${response.status}`));
+      }
+      return response.json();
+    } catch (error) {
+      return Seidr.Err(error);
+    }
+  }
+
+  public async writePattern(state: Pick<State.State, 'frames'>): Promise<void> {
+    debug('attempting to write pattern: %j', state);
+    await this.post('control/pattern', JSON.stringify({ frames: state.frames }));
+  }
+
   public async toggleLight(state: boolean): Promise<Seidr.Result<Error, boolean>> {
     debug('sending control request - "%s"', state);
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 
 use serde::{Deserialize, Serialize};
@@ -20,10 +21,134 @@ impl Default for ControlResponse {
   }
 }
 
+#[derive(Debug, Serialize)]
+struct ControlPatternResponse {
+  ok: bool,
+  timestamp: chrono::DateTime<chrono::Utc>,
+  name: String,
+}
+
+impl Default for ControlPatternResponse {
+  fn default() -> Self {
+    Self {
+      ok: true,
+      timestamp: chrono::Utc::now(),
+      name: String::new(),
+    }
+  }
+}
+
+#[derive(Default, Debug, Deserialize)]
+struct ControlPatternWriteColorAssignmentPayload {
+  hex: String,
+  ledn: u8,
+}
+
+#[derive(Default, Debug, Deserialize)]
+struct ControlPatternWriteFramePayload {
+  colors: Vec<ControlPatternWriteColorAssignmentPayload>,
+}
+
+#[derive(Default, Debug, Deserialize)]
+struct ControlPatternWritePayload {
+  frames: Vec<ControlPatternWriteFramePayload>,
+}
+
 #[derive(Default, Debug, Deserialize)]
 struct ControlQuery {
   mode: String,
   pattern: Option<String>,
+}
+
+fn parse_hex(input: &String) -> Option<(u8, u8, u8)> {
+  let mut results = (1..input.len())
+    .step_by(2)
+    .map(|i| u8::from_str_radix(&input[i..i + 2], 16).ok())
+    .flatten()
+    .collect::<Vec<u8>>();
+
+  results
+    .pop()
+    .zip(results.pop())
+    .zip(results.pop())
+    .map(|((r, g), b)| (r, g, b))
+}
+
+// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
+pub async fn write_pattern(mut request: Request<State>) -> Result {
+  let oid = super::cookie(&request)
+    .and_then(|cook| Claims::decode(&cook.value()).ok())
+    .map(|claims| claims.oid)
+    .ok_or_else(|| {
+      log::warn!("unauthorized attempt to query state");
+      tide::Error::from_str(404, "not-found")
+    })?;
+
+  request.state().authority(&oid).await.ok_or_else(|| {
+    log::warn!("unauthorized attempt to commit command");
+    tide::Error::from_str(404, "not-found")
+  })?;
+
+  let payload = request
+    .body_json::<ControlPatternWritePayload>()
+    .await
+    .map_err(|error| {
+      log::warn!("invalid pattern write payload - {}", error);
+      tide::Error::from_str(422, "bad-payload")
+    })?;
+
+  let name = uuid::Uuid::new_v4().to_string();
+  log::info!("user '{}' attempting to write a pattern - {:?}", oid, name);
+
+  let pattern = payload
+    .frames
+    .into_iter()
+    .enumerate()
+    .fold(HashMap::new(), |mut acc, (indx, frame)| {
+      let current = frame.colors.into_iter().fold(HashMap::new(), |mut acc, col| {
+        let color = parse_hex(&col.hex);
+        if let Some(real) = color {
+          acc.insert(col.ledn, blinkrs::Color::Three(real.0, real.1, real.2));
+        } else {
+          log::warn!("unable to parse hex string '{}'", col.hex);
+        }
+        acc
+      });
+
+      if indx < (u8::MAX as usize) {
+        acc.insert(indx as u8, current);
+        acc
+      } else {
+        log::warn!("too many frames (max {})", u8::MAX);
+        acc
+      }
+    });
+
+  request
+    .state()
+    .heart
+    .send(HeartControl::Save(name.clone(), pattern))
+    .await
+    .map_err(|error| {
+      log::warn!("unable to issue heartbeat save command - {}", error);
+      tide::Error::from_str(500, "bad-heart")
+    })?;
+
+  request
+    .state()
+    .heart
+    .send(HeartControl::Load(name.clone()))
+    .await
+    .map_err(|error| {
+      log::warn!("unable to issue heartbeat load command - {}", error);
+      tide::Error::from_str(500, "bad-heart")
+    })?;
+
+  let res = ControlPatternResponse {
+    name: name,
+    ..Default::default()
+  };
+  tide::Body::from_json(&res).map(|bod| Response::builder(200).body(bod).build())
 }
 
 // ROUTE: proxy to octoprint (mjpg-streamer) snapshot url

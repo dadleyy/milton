@@ -1095,7 +1095,7 @@ checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 
 [[package]]
 name = "milton"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "async-std",
  "blinkrs",
@@ -1107,6 +1107,7 @@ dependencies = [
  "serde",
  "surf",
  "tide",
+ "uuid",
 ]
 
 [[package]]
@@ -1980,6 +1981,15 @@ dependencies = [
  "matches",
  "percent-encoding",
  "serde",
+]
+
+[[package]]
+name = "uuid"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom 0.2.4",
 ]
 
 [[package]]

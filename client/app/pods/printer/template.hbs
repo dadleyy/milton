@@ -7,7 +7,12 @@
   <when.ok as |model|>
     <div class="lg:flex lg:items-start">
       <div class="lg:pr-4">
-        <img src="{{model.snapshotURL}}" alt="printer" class="block rounded mx-auto" />
+        <img
+          src="{{model.snapshotURL}}"
+          alt="printer"
+          class="block rounded mx-auto"
+          {{did-insert this.refreshSnapshot}}
+        />
       </div>
 
       <div class="lg:pl-4 lg:mt-0 mt-4">

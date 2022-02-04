@@ -9,6 +9,7 @@ pub enum HeartControl {
   Stop,
   Start,
   Load(String),
+  Save(String, HashMap<u8, HashMap<u8, blinkrs::Color>>),
 }
 
 #[derive(Default)]
@@ -86,6 +87,35 @@ pub struct Heart {
 impl Heart {
   pub fn builder() -> HeartBuilder {
     HeartBuilder::default()
+  }
+
+  async fn save<P>(&self, input: P, pattern: HashMap<u8, HashMap<u8, blinkrs::Color>>) -> Result<()>
+  where
+    P: AsRef<Path>,
+  {
+    let mut target = self.patterns.clone();
+    target.push(input);
+    async_std::fs::write(
+      target,
+      pattern
+        .iter()
+        .fold(String::new(), |acc, (frame, lights)| {
+          format!(
+            "{}{}",
+            acc,
+            lights.iter().fold(String::new(), |acc, (ledn, color)| {
+              let (red, blue, green) = match color {
+                blinkrs::Color::Three(r, g, b) => (*r, *g, *b),
+                _ => (0, 0, 0),
+              };
+              format!("{}F{} L{} {} {} {}\n", acc, frame, ledn, red, blue, green)
+            })
+          )
+        })
+        .as_bytes(),
+    )
+    .await
+    .map(|_| ())
   }
 
   async fn read<P>(&self, input: P) -> Result<HashMap<u8, HashMap<u8, blinkrs::Color>>>
@@ -294,6 +324,13 @@ pub async fn beat(heart: Heart) -> Result<()> {
   loop {
     if let Ok(control) = heart.receiver.try_recv() {
       match control {
+        HeartControl::Save(name, pattern) => {
+          log::info!("attempting to save a new heartbeat pattern - '{}'", name);
+
+          if let Err(error) = heart.save(name, pattern).await {
+            log::warn!("pattern save failed - {}", error);
+          }
+        }
         HeartControl::Stop => {
           log::info!("received stop command, stopping cursor");
           cursor.stop();

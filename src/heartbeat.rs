@@ -16,6 +16,7 @@ pub enum HeartControl {
 pub struct HeartBuilder {
   sender: Option<Sender<blinkrs::Message>>,
   receiver: Option<Receiver<HeartControl>>,
+  redis: Option<crate::redis::RedisConfig>,
   delay: Option<std::time::Duration>,
   ledr: Option<(u8, u8)>,
   patterns: Option<PathBuf>,
@@ -24,6 +25,11 @@ pub struct HeartBuilder {
 impl HeartBuilder {
   pub fn receiver(mut self, chan: Receiver<HeartControl>) -> Self {
     self.receiver = Some(chan);
+    self
+  }
+
+  pub fn redis(mut self, config: crate::redis::RedisConfig) -> Self {
+    self.redis = Some(config);
     self
   }
 
@@ -54,6 +60,7 @@ impl HeartBuilder {
       receiver,
       patterns,
       delay,
+      redis,
       ledr,
     } = self;
     let su = sender.ok_or(Error::new(ErrorKind::Other, "heart missing message output channel."))?;
@@ -68,6 +75,7 @@ impl HeartBuilder {
     Ok(Heart {
       sender: su,
       receiver: ru,
+      redis: redis.ok_or(Error::new(ErrorKind::Other, "missing redis config"))?,
       delay: delay.unwrap_or(std::time::Duration::from_millis(100)),
       patterns: dir,
       ledr: ledr.unwrap_or((crate::constants::DEFAULT_LEDN_START, crate::constants::DEFAULT_LEDN_END)),
@@ -81,6 +89,7 @@ pub struct Heart {
   receiver: Receiver<HeartControl>,
   delay: std::time::Duration,
   patterns: PathBuf,
+  redis: crate::redis::RedisConfig,
   ledr: (u8, u8),
 }
 
@@ -319,6 +328,10 @@ pub async fn beat(heart: Heart) -> Result<()> {
   }) {
     log::info!("initial pattern loaded successfully (frames {})", start.len());
     cursor.seek(start);
+  }
+
+  if let Err(error) = heart.redis.connect().await {
+    log::warn!("unable to connect to redis - {}", error);
   }
 
   loop {

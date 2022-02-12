@@ -31,15 +31,19 @@ async fn worker(receiver: Receiver<blinkrs::Message>) -> Result<()> {
 }
 
 async fn serve() -> Result<()> {
-  log::info!("thread running, preparing channels");
+  log::info!("thread running, preparing channels...");
   let messages = channel::bounded(1);
   let arteries = channel::bounded(1);
+
+  log::info!("initializing redis configuration...");
+  let redis = milton::redis::from_env()?;
 
   log::info!("initializing heart...");
   let heart = milton::heartbeat::Heart::builder()
     .sender(messages.0.clone())
     .receiver(arteries.1)
     .patterns(std::env::var("HEARTBEAT_PATTERN_DIR").ok().unwrap_or_default().into())
+    .redis(redis.clone())
     .delay(
       std::env::var("HEARTBEAT_FRAME_DELAY")
         .ok()
@@ -70,6 +74,7 @@ async fn serve() -> Result<()> {
     .oauth(milton::auth_zero::AuthZeroConfig::from_env()?)
     .sender(messages.0.clone())
     .heart(arteries.0)
+    .redis(redis.clone())
     .build()?;
 
   log::info!("spawing blinker channel worker thread");

@@ -20,9 +20,15 @@ pub struct StateBuilder {
   sender: Option<Sender<blinkrs::Message>>,
   heart: Option<Sender<HeartControl>>,
   oauth: Option<auth_zero::AuthZeroConfig>,
+  redis: Option<crate::redis::RedisConfig>,
 }
 
 impl StateBuilder {
+  pub fn redis(mut self, config: crate::redis::RedisConfig) -> Self {
+    self.redis = Some(config);
+    self
+  }
+
   pub fn heart(mut self, chan: Sender<HeartControl>) -> Self {
     self.heart = Some(chan);
     self
@@ -42,7 +48,12 @@ impl StateBuilder {
     let sender = self.sender.ok_or(Error::new(ErrorKind::Other, "missing sender"))?;
     let heart = self.heart.ok_or(Error::new(ErrorKind::Other, "missing heart"))?;
     let oauth = self.oauth.ok_or(Error::new(ErrorKind::Other, "missing oauth config"))?;
-    Ok(State { sender, heart, oauth })
+    Ok(State {
+      sender,
+      heart,
+      oauth,
+      redis: self.redis.ok_or(Error::new(ErrorKind::Other, "missing-redis"))?,
+    })
   }
 }
 
@@ -51,11 +62,20 @@ pub struct State {
   sender: Sender<blinkrs::Message>,
   heart: Sender<HeartControl>,
   oauth: auth_zero::AuthZeroConfig,
+  redis: crate::redis::RedisConfig,
 }
 
 impl State {
   pub fn builder() -> StateBuilder {
     StateBuilder::default()
+  }
+
+  pub async fn command<T, V>(&self, cmd: &kramer::Command<T, V>) -> Result<()>
+  where
+    T: std::fmt::Display,
+    V: std::fmt::Display,
+  {
+    self.redis.send(&cmd).await.map(|_| ())
   }
 
   pub async fn authority<T>(&self, id: T) -> Option<Authority>

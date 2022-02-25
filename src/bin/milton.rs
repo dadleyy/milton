@@ -78,31 +78,35 @@ async fn serve() -> Result<()> {
     .build()?;
 
   log::info!("spawing blinker channel worker thread");
-  let wh = async_std::task::spawn(worker(messages.1));
+  let blinker_worker = async_std::task::spawn(worker(messages.1));
 
   log::info!("spawing heartbeat channel worker thread");
-  let hbh = async_std::task::spawn(milton::heartbeat::beat(heart));
+  let heartbeat_worker = async_std::task::spawn(milton::heartbeat::beat(heart));
 
   let addr = std::env::var("WEBHOOK_LISTENER_ADDR").unwrap_or("0.0.0.0:8081".into());
   log::info!("preparing web thread on addr '{}'", addr);
 
   let mut app = tide::with_state(server);
-  app.at("/incoming-webhook").post(milton::server::webhook::hook);
+  app.at("/incoming-webhook").post(milton::server::routes::webhook::hook);
 
-  app.at("/control").post(milton::server::control::command);
-  app.at("/control").get(milton::server::control::query);
-  app.at("/control/snapshot").get(milton::server::control::snapshot);
-  app.at("/control/pattern").post(milton::server::control::write_pattern);
+  app.at("/control").post(milton::server::routes::control::command);
+  app.at("/control").get(milton::server::routes::control::query);
+  app
+    .at("/control/snapshot")
+    .get(milton::server::routes::control::snapshot);
+  app
+    .at("/control/pattern")
+    .post(milton::server::routes::control::write_pattern);
 
-  app.at("/auth/start").get(milton::server::auth::start);
-  app.at("/auth/complete").get(milton::server::auth::complete);
-  app.at("/auth/identify").get(milton::server::auth::identify);
+  app.at("/auth/start").get(milton::server::routes::auth::start);
+  app.at("/auth/complete").get(milton::server::routes::auth::complete);
+  app.at("/auth/identify").get(milton::server::routes::auth::identify);
 
-  app.at("/*").all(milton::server::missing);
+  app.at("/*").all(milton::server::routes::missing);
   app.listen(&addr).await?;
 
-  wh.await?;
-  hbh.await?;
+  blinker_worker.await?;
+  heartbeat_worker.await?;
   Ok(())
 }
 

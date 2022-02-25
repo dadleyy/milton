@@ -25,3 +25,4 @@ chrono = { version = "^0.4" }
 surf = { version = "^2.3.0" }
 kramer = { version = "^1.1.0", features = ["kramer-async"] }
 jsonwebtoken = { version = "^7.2.0" }
+serialport = { version = "^4.0" }

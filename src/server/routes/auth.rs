@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tide::{Body, Error, Redirect, Request, Response, Result};
 
-use super::{cookie, sec::Claims, State};
+use crate::server::{cookie, sec::Claims, State};
 
 #[cfg(debug_assertions)]
 const COOKIE_SET_FLAGS: &'static str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly";

@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use tide::{Request, Response, Result};
 
-use super::State;
+use crate::server::State;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

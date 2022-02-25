@@ -1,15 +1,12 @@
 use std::io::{Error, ErrorKind, Result};
 
 use async_std::channel::Sender;
-use tide::{http::Cookie, Request, Response};
+use tide::{http::Cookie, Request};
 
 use crate::{auth_zero, heartbeat::HeartControl};
 
-mod sec;
-
-pub mod auth;
-pub mod control;
-pub mod webhook;
+pub mod routes;
+pub(crate) mod sec;
 
 pub enum Authority {
   Admin,
@@ -100,9 +97,4 @@ pub fn cookie(request: &Request<State>) -> Option<Cookie<'static>> {
     .and_then(|list| list.get(0))
     .map(|value| value.to_string())
     .and_then(|cook| Cookie::parse(cook).ok())
-}
-
-pub async fn missing(req: Request<State>) -> tide::Result {
-  log::warn!("[warning] unknown request received - '{}'", req.url().path());
-  Ok(Response::builder(404).build())
 }

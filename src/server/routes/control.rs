@@ -76,7 +76,7 @@ fn parse_hex(input: &String) -> Option<(u8, u8, u8)> {
 
 // ROUTE: attempt to create a new pattern.
 pub async fn write_pattern(mut request: Request<State>) -> Result {
-  let oid = super::cookie(&request)
+  let oid = crate::server::cookie(&request)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
     .map(|claims| claims.oid)
     .ok_or_else(|| {
@@ -153,7 +153,7 @@ pub async fn write_pattern(mut request: Request<State>) -> Result {
 
 // ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
 pub async fn snapshot(request: Request<State>) -> Result {
-  let claims = super::cookie(&request)
+  let claims = crate::server::cookie(&request)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
     .ok_or_else(|| {
       log::warn!("unauthorized attempt to query state");
@@ -183,7 +183,7 @@ pub async fn snapshot(request: Request<State>) -> Result {
 
 // ROUTE: fetches current job information from octoprint api
 pub async fn query(req: Request<State>) -> Result {
-  super::cookie(&req)
+  crate::server::cookie(&req)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
     .ok_or_else(|| {
       log::warn!("unauthorized attempt to query state");
@@ -226,7 +226,7 @@ pub async fn query(req: Request<State>) -> Result {
 
 // ROUTE: sends command to heartbeat/light controls.
 pub async fn command(mut req: Request<State>) -> Result {
-  let claims = super::cookie(&req)
+  let claims = crate::server::cookie(&req)
     .and_then(|cook| Claims::decode(&cook.value()).ok())
     .ok_or_else(|| {
       log::warn!("unauthorized attempt to commit command");

@@ -84,26 +84,11 @@ async fn serve() -> Result<()> {
   let heartbeat_worker = async_std::task::spawn(milton::heartbeat::beat(heart));
 
   let addr = std::env::var("WEBHOOK_LISTENER_ADDR").unwrap_or("0.0.0.0:8081".into());
-  log::info!("preparing web thread on addr '{}'", addr);
+  log::info!("entering main web thread on '{}'", addr);
 
-  let mut app = tide::with_state(server);
-  app.at("/incoming-webhook").post(milton::server::routes::webhook::hook);
-
-  app.at("/control").post(milton::server::routes::control::command);
-  app.at("/control").get(milton::server::routes::control::query);
-  app
-    .at("/control/snapshot")
-    .get(milton::server::routes::control::snapshot);
-  app
-    .at("/control/pattern")
-    .post(milton::server::routes::control::write_pattern);
-
-  app.at("/auth/start").get(milton::server::routes::auth::start);
-  app.at("/auth/complete").get(milton::server::routes::auth::complete);
-  app.at("/auth/identify").get(milton::server::routes::auth::identify);
-
-  app.at("/*").all(milton::server::routes::missing);
-  app.listen(&addr).await?;
+  if let Err(error) = milton::server::run(server, &addr).await {
+    log::warn!("web thread faile with error - {}", error);
+  }
 
   blinker_worker.await?;
   heartbeat_worker.await?;

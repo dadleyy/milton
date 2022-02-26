@@ -1,100 +1,32 @@
-use std::io::{Error, ErrorKind, Result};
+use std::io::Result;
 
-use async_std::channel::Sender;
-use tide::{http::Cookie, Request};
+mod authority;
+mod cookie;
+mod routes;
+mod sec;
+mod state;
 
-use crate::{auth_zero, heartbeat::HeartControl};
+pub(crate) use cookie::cookie;
 
-pub mod routes;
-pub(crate) mod sec;
+pub use state::{State, StateBuilder};
 
-pub enum Authority {
-  Admin,
-}
+pub async fn run<S>(state: State, addr: S) -> Result<()>
+where
+  S: AsRef<str>,
+{
+  let mut app = tide::with_state(state);
 
-#[derive(Default, Clone)]
-pub struct StateBuilder {
-  sender: Option<Sender<blinkrs::Message>>,
-  heart: Option<Sender<HeartControl>>,
-  oauth: Option<auth_zero::AuthZeroConfig>,
-  redis: Option<crate::redis::RedisConfig>,
-}
+  app.at("/incoming-webhook").post(routes::webhook::hook);
 
-impl StateBuilder {
-  pub fn redis(mut self, config: crate::redis::RedisConfig) -> Self {
-    self.redis = Some(config);
-    self
-  }
+  app.at("/control").post(routes::control::command);
+  app.at("/control").get(routes::control::query);
+  app.at("/control/snapshot").get(routes::control::snapshot);
+  app.at("/control/pattern").post(routes::control::write_pattern);
 
-  pub fn heart(mut self, chan: Sender<HeartControl>) -> Self {
-    self.heart = Some(chan);
-    self
-  }
+  app.at("/auth/start").get(routes::auth::start);
+  app.at("/auth/complete").get(routes::auth::complete);
+  app.at("/auth/identify").get(routes::auth::identify);
 
-  pub fn oauth(mut self, conf: auth_zero::AuthZeroConfig) -> Self {
-    self.oauth = Some(conf);
-    self
-  }
-
-  pub fn sender(mut self, chan: Sender<blinkrs::Message>) -> Self {
-    self.sender = Some(chan);
-    self
-  }
-
-  pub fn build(self) -> Result<State> {
-    let sender = self.sender.ok_or(Error::new(ErrorKind::Other, "missing sender"))?;
-    let heart = self.heart.ok_or(Error::new(ErrorKind::Other, "missing heart"))?;
-    let oauth = self.oauth.ok_or(Error::new(ErrorKind::Other, "missing oauth config"))?;
-    Ok(State {
-      sender,
-      heart,
-      oauth,
-      redis: self.redis.ok_or(Error::new(ErrorKind::Other, "missing-redis"))?,
-    })
-  }
-}
-
-#[derive(Clone)]
-pub struct State {
-  sender: Sender<blinkrs::Message>,
-  heart: Sender<HeartControl>,
-  oauth: auth_zero::AuthZeroConfig,
-  redis: crate::redis::RedisConfig,
-}
-
-impl State {
-  pub fn builder() -> StateBuilder {
-    StateBuilder::default()
-  }
-
-  pub async fn command<T, V>(&self, cmd: &kramer::Command<T, V>) -> Result<()>
-  where
-    T: std::fmt::Display,
-    V: std::fmt::Display,
-  {
-    self.redis.send(&cmd).await.map(|_| ())
-  }
-
-  pub async fn authority<T>(&self, id: T) -> Option<Authority>
-  where
-    T: std::fmt::Display,
-  {
-    let oauth = self.oauth();
-    let roles = oauth.fetch_user_roles(id).await.ok()?;
-    roles.into_iter().find(|role| role.is_admin()).map(|_| Authority::Admin)
-  }
-
-  #[inline]
-  pub fn oauth(&self) -> auth_zero::AuthZeroConfig {
-    self.oauth.clone()
-  }
-}
-
-#[inline]
-pub fn cookie(request: &Request<State>) -> Option<Cookie<'static>> {
-  request
-    .header("Cookie")
-    .and_then(|list| list.get(0))
-    .map(|value| value.to_string())
-    .and_then(|cook| Cookie::parse(cook).ok())
+  app.at("/*").all(routes::missing);
+  app.listen(addr.as_ref()).await
 }

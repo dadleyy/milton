@@ -83,7 +83,7 @@ jobs:
       run:
         working-directory: src/milton-web
     container:
-      image: dadleyy/ubuntu-jammy-opnssl-3.x-rust-aarch64-compiler
+      image: dadleyy/ubuntu-jammy-opnssl-3.x-rust-aarch64-compiler:latest
     env:
       MILTON_VERSION: "${{ github.sha }}"
     steps:

@@ -14,7 +14,7 @@ impl Claims {
   {
     let day = chrono::Utc::now()
       .checked_add_signed(chrono::Duration::minutes(60))
-      .unwrap_or(chrono::Utc::now());
+      .unwrap_or_else(chrono::Utc::now);
 
     let exp = day.timestamp() as usize;
     let iat = chrono::Utc::now().timestamp() as usize;
@@ -50,7 +50,7 @@ impl Claims {
     let header = &jsonwebtoken::Header::default();
     let secret = jsonwebtoken::EncodingKey::from_secret(secret.as_ref().as_bytes());
 
-    jsonwebtoken::encode(&header, &self, &secret).map_err(|error| {
+    jsonwebtoken::encode(header, &self, &secret).map_err(|error| {
       log::warn!("unable to encode token - {}", error);
       std::io::Error::new(std::io::ErrorKind::Other, "bad-jwt")
     })

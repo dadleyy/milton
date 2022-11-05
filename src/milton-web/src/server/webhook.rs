@@ -70,7 +70,7 @@ pub async fn hook(mut req: Request<State>) -> Result {
 
   log::info!("device[{}] - {}", qualified.device_identifier, qualified.message);
 
-  let _blink = match qualified.topic.as_str() {
+  match qualified.topic.as_str() {
     "Print Done" => log::debug!("done"),
     "Print Started" => log::debug!("started"),
     "Print Progress" => log::debug!("progress"),

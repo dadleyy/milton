@@ -10,7 +10,7 @@ pub struct UserRole {
 
 impl UserRole {
   pub fn is_admin(&self) -> bool {
-    self.name.split(":").any(|part| part.starts_with("admin"))
+    self.name.split(':').any(|part| part.starts_with("admin"))
   }
 }
 
@@ -215,8 +215,8 @@ impl AuthZeroConfig {
       &[
         ("client_id", self.auth_client_id.as_str()),
         ("redirect_uri", self.redirect_uri.as_str()),
-        ("response_type", &"code"),
-        ("scope", &"openid profile email"),
+        ("response_type", "code"),
+        ("scope", "openid profile email"),
       ],
     )
     .map_err(|error| {

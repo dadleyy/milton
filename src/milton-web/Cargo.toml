@@ -1,6 +1,7 @@
 [package]
 name = "milton"
-version = "0.2.8"
+# not using version field; this is an application for now; sha is fine.
+version = "0.0.0"
 edition = "2021"
 publish = false
 

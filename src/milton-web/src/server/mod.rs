@@ -132,7 +132,6 @@ where
   app.at("/control").post(control::command);
   app.at("/control").get(control::query);
   app.at("/control/snapshot").get(control::snapshot);
-  app.at("/control/pattern").post(control::write_pattern);
 
   app.at("/auth/start").get(auth::start);
   app.at("/auth/end").get(auth::end);

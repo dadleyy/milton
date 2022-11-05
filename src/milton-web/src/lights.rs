@@ -3,14 +3,14 @@ use async_std::stream::StreamExt;
 use serde::Deserialize;
 use std::io::Result;
 
-#[derive(Deserialize, Debug, PartialEq, Clone)]
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct LightConfiguration {
   pub device: String,
 
   pub baud: u32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Command {
   Configure(LightConfiguration),
   On,
@@ -75,7 +75,7 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
           Some(mut con) => {
             log::debug!("turning lights off");
 
-            if let Err(error) = write!(con, "{}\n", if off == Command::Off { "off" } else { "on" }) {
+            if let Err(error) = writeln!(con, "{}", if off == Command::Off { "off" } else { "on" }) {
               log::warn!("unable to write command - {error}");
             }
 
@@ -96,7 +96,7 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
 
       Err(_) => {
         log::trace!("no messages");
-        empty_reads = empty_reads + 1;
+        empty_reads += 1;
       }
     }
 

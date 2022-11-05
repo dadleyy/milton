@@ -3,12 +3,14 @@ use tide::{Body, Error, Redirect, Request, Response, Result};
 
 use super::{cookie, sec::Claims, State};
 
-const COOKIE_NAME: &'static str = "_obs";
+const COOKIE_NAME: &str = "_obs";
 
 #[cfg(debug_assertions)]
-const COOKIE_SET_FLAGS: &'static str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly";
+const COOKIE_SET_FLAGS: &str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly";
 #[cfg(not(debug_assertions))]
-const COOKIE_SET_FLAGS: &'static str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly; Secure";
+const COOKIE_SET_FLAGS: &str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly; Secure";
+
+const COOKIE_CLEAR_FLAGS: &str = "Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; SameSite=Strict; HttpOnly";
 
 #[derive(Debug, Serialize)]
 struct AuthIdentifyResponseUserInfo {
@@ -36,7 +38,7 @@ impl Default for AuthIdentifyResponse {
 // ROUTE: clears the cookie
 pub async fn end(request: Request<State>) -> Result {
   let response = Response::builder(302)
-    .header("Set-Cookie", format!("{}=no; {}", COOKIE_NAME, COOKIE_SET_FLAGS))
+    .header("Set-Cookie", format!("{}=0; {}", COOKIE_NAME, COOKIE_CLEAR_FLAGS))
     .header("Location", request.state().ui_config.auth_complete_uri.as_str())
     .build();
   Ok(response)
@@ -72,7 +74,7 @@ pub async fn complete(request: Request<State>) -> Result {
     .url()
     .query_pairs()
     .find_map(|(k, v)| if k == "code" { Some(v) } else { None })
-    .ok_or(Error::from_str(404, "no-code"))?;
+    .ok_or_else(|| Error::from_str(404, "no-code"))?;
 
   let oauth = request.state().oauth();
   let user = oauth.fetch_initial_user_info(&code).await.map_err(|error| {
@@ -80,7 +82,7 @@ pub async fn complete(request: Request<State>) -> Result {
     Error::from_str(500, "bad-oauth")
   })?;
 
-  if user.email_verified.unwrap_or(false) != true {
+  if user.email_verified.is_none() {
     log::warn!("user email not verified for sub '{}'", user.sub);
     return Err(Error::from_str(404, "user-not-found"));
   }
@@ -91,7 +93,7 @@ pub async fn complete(request: Request<State>) -> Result {
   })?;
 
   // TODO: should non-admins be allowed to see info?
-  if roles.iter().any(|role| role.is_admin()) != true {
+  if !roles.iter().any(|role| role.is_admin()) {
     log::warn!("user not admin, skippping cookie setting (roles {:?})", roles);
     return Err(Error::from_str(404, "user-not-found"));
   }

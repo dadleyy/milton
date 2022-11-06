@@ -54,6 +54,10 @@ pub struct StateBuilder {
 
   /// General, misc config. Needs cleaning.
   ui_config: Option<MiltonUIConfiguration>,
+
+  /// The `version` field is expected to be populated from the `MILTON_VERSION` value at compile
+  /// time.
+  version: Option<String>,
 }
 
 impl StateBuilder {
@@ -75,6 +79,12 @@ impl StateBuilder {
     self
   }
 
+  /// Populates the version value.
+  pub fn version(mut self, version: String) -> Self {
+    self.version = Some(version);
+    self
+  }
+
   /// Validates and returns a `State` instance.
   pub fn build(self) -> Result<State> {
     let sender = self
@@ -90,6 +100,9 @@ impl StateBuilder {
       sender,
       oauth,
       ui_config,
+      version: self
+        .version
+        .ok_or_else(|| Error::new(ErrorKind::NotFound, "no version provided"))?,
     })
   }
 }
@@ -107,6 +120,9 @@ pub struct State {
 
   /// Auth0 credentials (client ids, secrets, etc...)
   pub(crate) oauth: oauth::AuthZeroConfig,
+
+  /// Compiler time version value.
+  pub(crate) version: String,
 }
 
 impl State {

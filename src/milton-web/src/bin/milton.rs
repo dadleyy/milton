@@ -61,6 +61,7 @@ async fn serve(config: RuntimeConfiguration) -> Result<()> {
   log::info!("initializing server...");
   let server = milton::server::State::builder()
     .oauth(config.oauth)
+    .version(option_env!("MILTON_VERSION").unwrap_or_else(|| "dev").to_string())
     .ui_config(config.ui)
     .sender(server_effects.0.clone())
     .build()?;

@@ -35,6 +35,9 @@ struct AuthIdentifyResponse {
   /// This field is true when were are able to verify an authenticated user from the cookie data.
   ok: bool,
 
+  /// Include the version in our auth payload.
+  version: String,
+
   /// The current time.
   timestamp: chrono::DateTime<chrono::Utc>,
 
@@ -48,6 +51,7 @@ impl Default for AuthIdentifyResponse {
       ok: false,
       timestamp: chrono::Utc::now(),
       session: None,
+      version: "unknown".to_string(),
     }
   }
 }
@@ -75,6 +79,7 @@ pub async fn identify(request: Request<State>) -> Result {
 
   log::info!("attempting to identify user from claims - {:?}", claims);
   let mut res = AuthIdentifyResponse::default();
+  res.version = request.state().version.clone();
   let oauth = &request.state().oauth;
 
   if let Some(claims) = claims {

@@ -3,8 +3,7 @@
 A web app for controlling lights on a printer and getting less-sensitive info from octoprint.
 
 ```
-/client     <- emberjs frontend source code
-/data       <- led pattern files
-/hardware   <- stl files
-/src        <- rust api source code
+/src/milton-ui         <- elm frontend source code
+/src/milton-web        <- rust web application
+/src/milton-pio-lights <- "firmware" for led strip
 ```

@@ -56,8 +56,7 @@ impl Default for AuthIdentifyResponse {
 pub async fn end(request: Request<State>) -> Result {
   let clear_cookie = format!("{}=''; {}", COOKIE_NAME, COOKIE_CLEAR_FLAGS);
 
-  let response = Response::builder(200)
-    .content_type("text/html")
+  let response = Response::builder(302)
     .header("Set-Cookie", &clear_cookie)
     .header("Location", &request.state().ui_config.auth_complete_uri)
     .build();

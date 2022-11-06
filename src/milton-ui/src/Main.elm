@@ -226,7 +226,12 @@ body model =
             Unauthorized _ ->
                 Html.div [ AT.class "relative w-full h-full flex items-center" ]
                     [ Html.div [ AT.class "mx-auto" ]
-                        [ Html.a [ AT.href (envFromModel model |> .loginURL) ] [ Html.text "login" ]
+                        [ Html.a
+                            [ AT.href (envFromModel model |> .loginURL)
+                            , AT.target "_self"
+                            , AT.rel "noopener"
+                            ]
+                            [ Html.text "login" ]
                         ]
                     ]
 

@@ -3,6 +3,7 @@ use async_std::stream::StreamExt;
 use serde::Deserialize;
 use std::io::Result;
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct LightConfiguration {
   pub device: String,
@@ -10,13 +11,35 @@ pub struct LightConfiguration {
   pub baud: u32,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BasicColor {
+  Red,
+  Green,
+  Blue,
+}
+
+impl std::fmt::Display for BasicColor {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    match self {
+      BasicColor::Red => write!(formatter, "red"),
+      BasicColor::Green => write!(formatter, "green"),
+      BasicColor::Blue => write!(formatter, "blue"),
+    }
+  }
+}
+
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
   Configure(LightConfiguration),
   On,
+  BasicColor(BasicColor),
   Off,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
   log::debug!("starting light effect manager runtime");
   let mut timer = async_std::stream::interval(std::time::Duration::from_millis(100));
@@ -68,6 +91,27 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
             Ok(port)
           })
           .ok();
+      }
+
+      Ok(Command::BasicColor(color @ BasicColor::Red))
+      | Ok(Command::BasicColor(color @ BasicColor::Green))
+      | Ok(Command::BasicColor(color @ BasicColor::Blue)) => {
+        connection = match connection.take() {
+          Some(mut con) => {
+            log::debug!("turning lights off");
+
+            if let Err(error) = writeln!(con, "{color}") {
+              log::warn!("unable to write command - {error}");
+            }
+
+            Some(con)
+          }
+
+          None => {
+            log::warn!("no serial connection ready yet");
+            None
+          }
+        };
       }
 
       Ok(off @ Command::Off) | Ok(off @ Command::On) => {

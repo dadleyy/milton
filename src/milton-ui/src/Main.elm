@@ -54,6 +54,11 @@ type Page
     | Input String
 
 
+type LightRequest
+    = State Bool
+    | Color Button.RGBColor
+
+
 type Model
     = Booting Environment
     | Unauthorized Environment
@@ -64,7 +69,7 @@ type Model
 type Message
     = LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
-    | ToggleLight Bool
+    | ToggleLight LightRequest
     | SessionLoaded (Result Http.Error SessionPayload)
     | CommandResponse (Result Http.Error ())
     | Tick Time.Posix
@@ -252,7 +257,7 @@ viewPage page env session =
                 , Html.div [ AT.class "mx-auto flex items-center mt-4" ]
                     [ Html.div [ AT.class "mr-1" ]
                         [ Button.view
-                            ( Button.Icon Button.LightOn (ToggleLight True)
+                            ( Button.Icon Button.LightOn (ToggleLight (State True))
                             , if isBusy then
                                 Button.Disabled
 
@@ -260,14 +265,44 @@ viewPage page env session =
                                 Button.Primary
                             )
                         ]
-                    , Html.div []
+                    , Html.div [ AT.class "mr-1" ]
                         [ Button.view
-                            ( Button.Icon Button.LightOff (ToggleLight False)
+                            ( Button.Icon Button.LightOff (ToggleLight (State False))
                             , if isBusy then
                                 Button.Disabled
 
                               else
                                 Button.Warning
+                            )
+                        ]
+                    , Html.div [ AT.class "mr-1" ]
+                        [ Button.view
+                            ( Button.Icon Button.CircleDot (ToggleLight (Color Button.Red))
+                            , if isBusy then
+                                Button.Disabled
+
+                              else
+                                Button.RGB Button.Red
+                            )
+                        ]
+                    , Html.div [ AT.class "mr-1" ]
+                        [ Button.view
+                            ( Button.Icon Button.CircleDot (ToggleLight (Color Button.Green))
+                            , if isBusy then
+                                Button.Disabled
+
+                              else
+                                Button.RGB Button.Green
+                            )
+                        ]
+                    , Html.div []
+                        [ Button.view
+                            ( Button.Icon Button.CircleDot (ToggleLight (Color Button.Blue))
+                            , if isBusy then
+                                Button.Disabled
+
+                              else
+                                Button.RGB Button.Blue
                             )
                         ]
                     ]
@@ -292,15 +327,35 @@ viewButton message =
     Html.button [] [ Html.text "" ]
 
 
-makeLightRequestBody : Bool -> JE.Value
-makeLightRequestBody bool =
-    JE.object
-        [ ( "kind", JE.string "state" )
-        , ( "on", JE.bool bool )
-        ]
+makeLightRequestBody : LightRequest -> JE.Value
+makeLightRequestBody requestKind =
+    case requestKind of
+        State bool ->
+            JE.object
+                [ ( "kind", JE.string "state" )
+                , ( "on", JE.bool bool )
+                ]
+
+        Color Button.Red ->
+            JE.object
+                [ ( "kind", JE.string "basic_color" )
+                , ( "color", JE.string "red" )
+                ]
+
+        Color Button.Green ->
+            JE.object
+                [ ( "kind", JE.string "basic_color" )
+                , ( "color", JE.string "green" )
+                ]
+
+        Color Button.Blue ->
+            JE.object
+                [ ( "kind", JE.string "basic_color" )
+                , ( "color", JE.string "blue" )
+                ]
 
 
-makeLightRequest : Environment -> Bool -> Cmd Message
+makeLightRequest : Environment -> LightRequest -> Cmd Message
 makeLightRequest env lightState =
     Http.post
         { body = Http.jsonBody (makeLightRequestBody lightState)

@@ -1,13 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+/// Information that is included in our JWT claims.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
-  pub exp: usize,
-  pub iat: usize,
-  pub oid: String,
+pub(crate) struct Claims {
+  /// The `exp` field is used for expiring tokens at some point in time.
+  pub(crate) exp: usize,
+  /// The `iat` field holds when the jwt was created.
+  pub(crate) iat: usize,
+  /// The id of our authenticated user.
+  pub(crate) oid: String,
 }
 
 impl Claims {
+  /// Given an id of a user, will return an instance of our claims with all other fields
+  /// populated.
   pub fn for_sub<T>(oid: T) -> Self
   where
     T: std::fmt::Display,
@@ -27,6 +33,8 @@ impl Claims {
     }
   }
 
+  /// Given the value of a jwt represented in some string-able type, will return the decoded
+  /// representation.
   pub fn decode<T, S>(target: &T, secret: &S) -> std::io::Result<Self>
   where
     T: std::fmt::Display,
@@ -43,6 +51,7 @@ impl Claims {
       .map(|data| data.claims)
   }
 
+  /// Encodes our claims into their string form.
   pub fn encode<S>(&self, secret: S) -> std::io::Result<String>
   where
     S: std::convert::AsRef<str>,

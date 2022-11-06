@@ -3,9 +3,13 @@ use tide::{Request, Response, Result};
 
 use crate::{octoprint::OctoprintJobResponse, server::State};
 
+/// Requests to the control api will receive this type serialized as json.
 #[derive(Debug, Serialize)]
 struct ControlResponse {
+  /// Was the command sent successfully.
   ok: bool,
+
+  /// The current time.
   timestamp: chrono::DateTime<chrono::Utc>,
 }
 
@@ -18,15 +22,31 @@ impl Default for ControlResponse {
   }
 }
 
+/// The most basic, on/off control request.
 #[derive(Debug, Deserialize)]
 struct StateControlQuery {
+  /// Whether or not the lights should be on.
   on: bool,
 }
 
+/// Wraps the `lights` module supported colors in a type easily deserialized from json.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+struct ColorControlQuery {
+  /// The color to set.
+  color: crate::lights::BasicColor,
+}
+
+/// This type is used to represent the various json payloads supported by the "direct" control api
+/// route.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ControlQuery {
+  /// Will control on/off.
   State(StateControlQuery),
+
+  /// Will control basic color.
+  BasicColor(ColorControlQuery),
 }
 
 // TODO: this will be useful once we're able to control specific colors. blocked by firmware.
@@ -44,7 +64,7 @@ enum ControlQuery {
 //     .map(|((r, g), b)| (r, g, b))
 // }
 
-// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
+/// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
 pub async fn snapshot(request: Request<State>) -> Result {
   let claims = super::claims(&request).ok_or_else(|| {
     log::warn!("unauthorized attempt to query state");
@@ -77,7 +97,7 @@ pub async fn snapshot(request: Request<State>) -> Result {
   )
 }
 
-// ROUTE: fetches current job information from octoprint api
+/// ROUTE: fetches current job information from octoprint api
 pub async fn query(req: Request<State>) -> Result {
   super::claims(&req).ok_or_else(|| {
     log::warn!("unauthorized attempt to query state");
@@ -106,7 +126,7 @@ pub async fn query(req: Request<State>) -> Result {
   tide::Body::from_json(&infos).map(|bod| Response::builder(200).body(bod).build())
 }
 
-// ROUTE: sends command to heartbeat/light controls.
+/// ROUTE: sends command to heartbeat/light controls.
 pub async fn command(mut req: Request<State>) -> Result {
   let claims = super::claims(&req).ok_or_else(|| {
     log::warn!("unauthorized attempt to commit command");
@@ -125,19 +145,22 @@ pub async fn command(mut req: Request<State>) -> Result {
 
   log::debug!("received control request - {:?}", query);
 
-  match query {
+  let effect = match query {
+    ControlQuery::BasicColor(ColorControlQuery { color }) => {
+      super::effects::Effects::Lights(crate::lights::Command::BasicColor(color))
+    }
     ControlQuery::State(target_state) => {
-      let effect = if target_state.on {
+      if target_state.on {
         super::effects::Effects::Lights(crate::lights::Command::On)
       } else {
         super::effects::Effects::Lights(crate::lights::Command::Off)
-      };
-
-      if let Err(error) = req.state().send(effect).await {
-        log::warn!("unable to send control effect - {error}");
-        return Ok(tide::Response::new(500));
       }
     }
+  };
+
+  if let Err(error) = req.state().send(effect).await {
+    log::warn!("unable to send control effect - {error}");
+    return Ok(tide::Response::new(500));
   }
 
   tide::Body::from_json(&ControlResponse::default()).map(|bod| Response::builder(200).body(bod).build())

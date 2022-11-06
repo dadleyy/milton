@@ -8,6 +8,7 @@ import Html.Events as EV
 type ButtonIcon
     = LightOn
     | LightOff
+    | CircleDot
 
 
 type Button a
@@ -15,11 +16,18 @@ type Button a
     | Text String a
 
 
+type RGBColor
+    = Red
+    | Green
+    | Blue
+
+
 type ButtonVariant
     = Disabled
     | Primary
     | Secondary
     | Warning
+    | RGB RGBColor
 
 
 view : ( Button a, ButtonVariant ) -> Html.Html a
@@ -30,6 +38,15 @@ view kind =
 
         variantClass =
             case Tuple.second kind of
+                RGB Red ->
+                    "bg-red"
+
+                RGB Green ->
+                    "bg-green"
+
+                RGB Blue ->
+                    "bg-blue"
+
                 Primary ->
                     "button-primary"
 
@@ -65,6 +82,9 @@ view kind =
 iconClass : ButtonIcon -> String
 iconClass kind =
     case kind of
+        CircleDot ->
+            "fa-solid fa-circle-dot"
+
         LightOn ->
             "fa-solid fa-lightbulb"
 

@@ -3,25 +3,42 @@ use tide::{Body, Error, Redirect, Request, Response, Result};
 
 use super::{cookie, sec::Claims, State};
 
-const COOKIE_NAME: &str = "_obs";
+/// The name of our session cookie used within our `Set-Cookie` headers.
+pub(crate) const COOKIE_NAME: &str = "_milton_session";
 
+/// When setting the cookie, these flags are used alongside the actual value.
 #[cfg(debug_assertions)]
 const COOKIE_SET_FLAGS: &str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly";
 #[cfg(not(debug_assertions))]
 const COOKIE_SET_FLAGS: &str = "Max-Age=3600; Path=/; SameSite=Strict; HttpOnly; Secure";
 
-const COOKIE_CLEAR_FLAGS: &str = "Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; SameSite=Strict; HttpOnly";
+/// When clearing a cookie, these flags are sent.
+#[cfg(debug_assertions)]
+const COOKIE_CLEAR_FLAGS: &str = "Max-Age=0; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/; SameSite=Strict; HttpOnly";
+#[cfg(not(debug_assertions))]
+const COOKIE_CLEAR_FLAGS: &str =
+  "Max-Age=0; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/; SameSite=Strict; HttpOnly; Secure";
 
+/// The inner type sent in our identify endpoint when a user is available.
 #[derive(Debug, Serialize)]
 struct AuthIdentifyResponseUserInfo {
+  /// Contains information provided by our oauth provider.
   user: crate::oauth::ManagementUserInfoResponse,
+
+  /// The list of Auth0 roles our current user is assigned to.
   roles: Vec<crate::oauth::UserRole>,
 }
 
+/// The json-serializable response structure for our identify endpoint.
 #[derive(Debug, Serialize)]
 struct AuthIdentifyResponse {
+  /// This field is true when were are able to verify an authenticated user from the cookie data.
   ok: bool,
+
+  /// The current time.
   timestamp: chrono::DateTime<chrono::Utc>,
+
+  /// Optionally-included information about the user if we found one.
   session: Option<AuthIdentifyResponseUserInfo>,
 }
 
@@ -35,16 +52,22 @@ impl Default for AuthIdentifyResponse {
   }
 }
 
-// ROUTE: clears the cookie
+/// ROUTE: clears the cookie
 pub async fn end(request: Request<State>) -> Result {
-  let response = Response::builder(302)
-    .header("Set-Cookie", format!("{}=0; {}", COOKIE_NAME, COOKIE_CLEAR_FLAGS))
-    .header("Location", request.state().ui_config.auth_complete_uri.as_str())
+  let clear_cookie = format!("{}=''; {}", COOKIE_NAME, COOKIE_CLEAR_FLAGS);
+
+  let response = Response::builder(200)
+    .content_type("text/html")
+    .header("Set-Cookie", &clear_cookie)
+    .header("Location", &request.state().ui_config.auth_complete_uri)
     .build();
+
+  log::debug!("clearing session cookie via {clear_cookie}");
+
   Ok(response)
 }
 
-// ROUTE: attempts to fetch user information from cookie.
+/// ROUTE: attempts to fetch user information from cookie.
 pub async fn identify(request: Request<State>) -> Result {
   let claims = cookie(&request).and_then(|cook| {
     log::info!("found cookie - {:?}", cook.value());
@@ -53,7 +76,7 @@ pub async fn identify(request: Request<State>) -> Result {
 
   log::info!("attempting to identify user from claims - {:?}", claims);
   let mut res = AuthIdentifyResponse::default();
-  let oauth = request.state().oauth();
+  let oauth = &request.state().oauth;
 
   if let Some(claims) = claims {
     let user = oauth.fetch_detailed_user_info(&claims.oid).await.ok();
@@ -68,15 +91,19 @@ pub async fn identify(request: Request<State>) -> Result {
   Body::from_json(&res).map(|bod| Response::builder(200).body(bod).build())
 }
 
-// ROUTE: callback for oauth, completes cookie storage.
+/// ROUTE: callback for oauth, completes cookie storage.
 pub async fn complete(request: Request<State>) -> Result {
+  log::debug!("completing oauth exchange");
+
   let code = request
     .url()
     .query_pairs()
     .find_map(|(k, v)| if k == "code" { Some(v) } else { None })
     .ok_or_else(|| Error::from_str(404, "no-code"))?;
 
-  let oauth = request.state().oauth();
+  log::debug!("attempting to exchange code '{code}'");
+
+  let oauth = &request.state().oauth;
   let user = oauth.fetch_initial_user_info(&code).await.map_err(|error| {
     log::warn!("unable to fetch initial user info - {}", error);
     Error::from_str(500, "bad-oauth")
@@ -117,10 +144,10 @@ pub async fn complete(request: Request<State>) -> Result {
   Ok(response)
 }
 
-// ROUTE: simple redirect, starts oauth flow.
+/// ROUTE: simple redirect, starts oauth flow.
 pub async fn start(request: Request<State>) -> Result {
   log::info!("initializing oauth redirect");
-  let destination = request.state().oauth().redirect_uri().map_err(|error| {
+  let destination = request.state().oauth.redirect_uri().map_err(|error| {
     log::warn!("{}", error);
     Error::from_str(500, "bad-oauth")
   })?;

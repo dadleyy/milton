@@ -1,3 +1,7 @@
+#![allow(clippy::missing_docs_in_private_items)]
+
+//! These types represent the schema of misc. octoprint related json responses.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]

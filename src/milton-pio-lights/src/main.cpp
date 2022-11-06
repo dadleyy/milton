@@ -12,16 +12,35 @@ static bool cleared = false;
 void process() {
   if (strcmp(buffer, "on") == 0) {
     Serial.println("ok (on)");
-
     pixels.fill(Adafruit_NeoPixel::Color(255, 255, 255));
     pixels.show();
     digitalWrite(LED_BUILTIN, HIGH);
     return;
   }
 
+  if (strcmp(buffer, "red") == 0) {
+    Serial.println("ok (red)");
+    pixels.fill(Adafruit_NeoPixel::Color(255, 0, 0));
+    pixels.show();
+    return;
+  }
+
+  if (strcmp(buffer, "green") == 0) {
+    Serial.println("ok (green)");
+    pixels.fill(Adafruit_NeoPixel::Color(0, 255, 0));
+    pixels.show();
+    return;
+  }
+
+  if (strcmp(buffer, "blue") == 0) {
+    Serial.println("ok (blue)");
+    pixels.fill(Adafruit_NeoPixel::Color(0, 0, 255));
+    pixels.show();
+    return;
+  }
+
   if (strcmp(buffer, "off") == 0) {
     Serial.println("ok (off)");
-
     pixels.fill(Adafruit_NeoPixel::Color(0, 0, 0));
     pixels.show();
     digitalWrite(LED_BUILTIN, LOW);

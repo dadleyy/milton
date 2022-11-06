@@ -2,6 +2,7 @@ use std::io::{Error, ErrorKind, Result};
 
 use serde::{Deserialize, Serialize};
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct UserRole {
   id: String,
@@ -9,11 +10,13 @@ pub struct UserRole {
 }
 
 impl UserRole {
+  /// Will return if the given rule is should be consider an "admin" role.
   pub fn is_admin(&self) -> bool {
     self.name.split(':').any(|part| part.starts_with("admin"))
   }
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct UserInfo {
   pub sub: String,
@@ -23,16 +26,19 @@ pub struct UserInfo {
   pub email_verified: Option<bool>,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Deserialize)]
 struct AuthCodeResponse {
   access_token: String,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ManagementTokenResponse {
   access_token: String,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ManagementUserInfoResponse {
   name: Option<String>,
@@ -43,6 +49,7 @@ pub struct ManagementUserInfoResponse {
   email_verified: bool,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Serialize)]
 pub struct AuthCodeRequest {
   grant_type: String,
@@ -53,6 +60,7 @@ pub struct AuthCodeRequest {
   audience: Option<String>,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct AuthZeroConfig {
   auth_client_id: String,
@@ -64,12 +72,14 @@ pub struct AuthZeroConfig {
 }
 
 impl AuthZeroConfig {
+  /// Returns the url that is used for exchanging codes for tokens.
   #[inline]
   pub fn token_uri(&self) -> Result<String> {
     let base = format!("{}/oauth/token", self.domain);
     Ok(base)
   }
 
+  /// Loads the basic oauth information provided from auth0.
   pub async fn fetch_initial_user_info<T>(&self, code: T) -> Result<UserInfo>
   where
     T: std::fmt::Display,
@@ -109,6 +119,7 @@ impl AuthZeroConfig {
     })
   }
 
+  /// Loads detailed user information from the auth0 management api.
   pub async fn fetch_detailed_user_info<T>(&self, id: T) -> Result<ManagementUserInfoResponse>
   where
     T: std::fmt::Display,
@@ -135,6 +146,7 @@ impl AuthZeroConfig {
       })
   }
 
+  /// Loads user roles from the auth0 management api for a given user.
   pub async fn fetch_user_roles<T>(&self, id: T) -> Result<Vec<UserRole>>
   where
     T: std::fmt::Display,
@@ -156,6 +168,7 @@ impl AuthZeroConfig {
     })
   }
 
+  /// Will attempt to create a management token for querying the auth0 management api.
   async fn get_new_management_token(&self) -> Result<String> {
     let mut response = surf::post(&self.token_uri()?)
       .body_json(&self.manage_token_payload()?)
@@ -183,6 +196,8 @@ impl AuthZeroConfig {
       .map(|b| b.access_token)
   }
 
+  /// Returns the json payload that will be used to look up Aut0 management info for a given user
+  /// id.
   fn manage_token_payload(&self) -> Result<AuthCodeRequest> {
     Ok(AuthCodeRequest {
       client_id: self.management_client_id.clone(),
@@ -194,6 +209,7 @@ impl AuthZeroConfig {
     })
   }
 
+  /// Creates the oauth payload for exchanging a code into a token.
   fn auth_token_payload<T>(&self, code: T) -> Result<AuthCodeRequest>
   where
     T: std::fmt::Display,
@@ -208,6 +224,7 @@ impl AuthZeroConfig {
     })
   }
 
+  /// Returns the url that users will be sent to at the start of an oauth exchange.
   pub fn redirect_uri(&self) -> Result<String> {
     let base = format!("{}/authorize", self.domain);
     tide::http::Url::parse_with_params(

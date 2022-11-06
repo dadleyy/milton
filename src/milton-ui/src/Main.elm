@@ -146,7 +146,7 @@ update message model =
 view : Model -> Browser.Document Message
 view model =
     { title = "milton-ui"
-    , body = [ body model ]
+    , body = [ viewBody model, viewFooter model ]
     }
 
 
@@ -214,9 +214,21 @@ sessionDecoder =
         (JD.field "session" sessionFieldDecoder)
 
 
-body : Model -> Html.Html Message
-body model =
-    Html.div [ AT.class "w-full h-full relative" ]
+viewFooter : Model -> Html.Html Message
+viewFooter model =
+    Html.footer [ AT.class "footer fixed bottom-0 left-0 w-full" ]
+        [ Html.div [ AT.class "flex items-center px-3 py-2 border-t border-solid border-slate-800" ]
+            [ Html.div [ AT.class "ml-auto" ]
+                [ Html.a [ AT.href "https://github.com/dadleyy/milton", AT.rel "noopener", AT.target "_blank" ]
+                    [ Html.text (envFromModel model |> .version) ]
+                ]
+            ]
+        ]
+
+
+viewBody : Model -> Html.Html Message
+viewBody model =
+    Html.div [ AT.class "w-full h-full relative pb-12" ]
         [ case model of
             Booting _ ->
                 Html.div [ AT.class "relative w-full h-full flex items-center" ]

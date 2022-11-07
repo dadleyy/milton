@@ -11,7 +11,7 @@ struct RuntimeConfiguration {
   #[allow(unused)]
   lights: milton::lights::LightConfiguration,
   oauth: milton::oauth::AuthZeroConfig,
-  ui: milton::server::MiltonUIConfiguration,
+  server: milton::server::Configuration,
 }
 
 #[derive(Deserialize, clap::Parser)]
@@ -62,7 +62,7 @@ async fn serve(config: RuntimeConfiguration) -> Result<()> {
   let server = milton::server::State::builder()
     .oauth(config.oauth)
     .version(option_env!("MILTON_VERSION").unwrap_or_else(|| "dev").to_string())
-    .ui_config(config.ui)
+    .config(config.server)
     .sender(server_effects.0.clone())
     .build()?;
 

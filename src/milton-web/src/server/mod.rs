@@ -26,7 +26,7 @@ pub(crate) enum Authority {
 
 /// This is a hodgepodge of config.
 #[derive(Deserialize, Clone, Debug)]
-pub struct MiltonUIConfiguration {
+pub struct Configuration {
   /// API root for octoprint. (e.g http://192.168.2.27:5000/api)
   octoprint_api_url: String,
 
@@ -41,6 +41,15 @@ pub struct MiltonUIConfiguration {
 
   /// The secret that will be used to sign jwt tokens.
   jwt_secret: String,
+
+  /// The redis host that we will use for session storage.
+  redis_host: String,
+
+  /// The redis port that we will use for session storage.
+  redis_port: u32,
+
+  /// The domain we're hosting from; used for cookies.
+  domain: String,
 }
 
 /// The builder-pattern impl for our shared `State` type.
@@ -53,7 +62,7 @@ pub struct StateBuilder {
   oauth: Option<oauth::AuthZeroConfig>,
 
   /// General, misc config. Needs cleaning.
-  ui_config: Option<MiltonUIConfiguration>,
+  config: Option<Configuration>,
 
   /// The `version` field is expected to be populated from the `MILTON_VERSION` value at compile
   /// time.
@@ -68,8 +77,8 @@ impl StateBuilder {
   }
 
   /// Populates the ui config.
-  pub fn ui_config(mut self, ui_config: MiltonUIConfiguration) -> Self {
-    self.ui_config = Some(ui_config);
+  pub fn config(mut self, config: Configuration) -> Self {
+    self.config = Some(config);
     self
   }
 
@@ -93,16 +102,20 @@ impl StateBuilder {
     let oauth = self
       .oauth
       .ok_or_else(|| Error::new(ErrorKind::Other, "missing oauth config"))?;
-    let ui_config = self
-      .ui_config
+    let config = self
+      .config
       .ok_or_else(|| Error::new(ErrorKind::NotFound, "no ui config found"))?;
+
     Ok(State {
       sender,
       oauth,
-      ui_config,
+      config,
+
       version: self
         .version
         .ok_or_else(|| Error::new(ErrorKind::NotFound, "no version provided"))?,
+
+      redis: async_std::sync::Arc::new(async_std::sync::Mutex::new(None)),
     })
   }
 }
@@ -116,13 +129,17 @@ pub struct State {
   sender: Sender<effects::Effects>,
 
   /// General configuration. Should probably be cleaned up.
-  pub(crate) ui_config: MiltonUIConfiguration,
+  pub(crate) config: Configuration,
 
   /// Auth0 credentials (client ids, secrets, etc...)
   pub(crate) oauth: oauth::AuthZeroConfig,
 
   /// Compiler time version value.
   pub(crate) version: String,
+
+  /// A shared tcp connection to our redis connection. This eventually should be expanded into a
+  /// pool of available tcp connections.
+  redis: async_std::sync::Arc<async_std::sync::Mutex<Option<async_std::net::TcpStream>>>,
 }
 
 impl State {
@@ -131,16 +148,78 @@ impl State {
     StateBuilder::default()
   }
 
+  /// Executes a redis command against our shared, mutex locked redis "pool".
+  async fn command<S, V>(&self, command: kramer::Command<S, V>) -> Result<kramer::Response>
+  where
+    S: std::fmt::Display,
+    V: std::fmt::Display,
+  {
+    let mut redis = self.redis.lock().await;
+
+    let mut pulled_connection = match redis.take() {
+      Some(inner) => inner,
+      None => {
+        let connection_addr = format!("{}:{}", self.config.redis_host, self.config.redis_port);
+        async_std::net::TcpStream::connect(&connection_addr)
+          .await
+          .map_err(|error| {
+            log::error!("failed establishing new connection to redis - {error}");
+            error
+          })?
+      }
+    };
+
+    let output = kramer::execute(&mut pulled_connection, &command)
+      .await
+      .map_err(|error| {
+        log::error!("unable to execute redis command - {error}");
+        error
+      })?;
+
+    *redis = Some(pulled_connection);
+
+    Ok(output)
+  }
+
+  pub(crate) async fn user_from_session<T>(&self, id: T) -> Option<auth::AuthIdentifyResponseUserInfo>
+  where
+    T: std::fmt::Display,
+  {
+    // Look up our session by the uuid in our redis session store
+    let serialized_id = format!("{id}");
+    let command =
+      kramer::Command::Strings::<&str, &str>(kramer::StringCommand::Get(kramer::Arity::One(&serialized_id)));
+
+    let response = self
+      .command(command)
+      .await
+      .map_err(|error| {
+        log::error!("unable to fetch session info - {error}");
+        error
+      })
+      .ok()?;
+
+    // Attempt to deserialize as our user info structure.
+    if let kramer::Response::Item(kramer::ResponseValue::String(inner)) = response {
+      log::trace!("has session data - {inner:?}");
+      return serde_json::from_str(&inner).ok();
+    }
+
+    None
+  }
+
   /// Returns the authority level based on the session data provided by our cookie. This is
   /// verified against our external oauth (auth0) provider.
   pub(crate) async fn authority<T>(&self, id: T) -> Option<Authority>
   where
     T: std::fmt::Display,
   {
-    let roles = self.oauth.fetch_user_roles(id).await.ok()?;
-    if roles.into_iter().any(|role| role.is_admin()) {
+    let data = self.user_from_session(id).await?;
+
+    if data.roles.into_iter().any(|role| role.is_admin()) {
       return Some(Authority::Admin);
     }
+
     None
   }
 
@@ -163,7 +242,7 @@ pub(crate) fn cookie(request: &Request<State>) -> Option<Cookie<'static>> {
 /// Returns the decoded jwd claims based on the cookie provided by an http request.
 pub(crate) fn claims(request: &Request<State>) -> Option<sec::Claims> {
   let cook = cookie(request)?;
-  sec::Claims::decode(&cook.value(), &request.state().ui_config.jwt_secret).ok()
+  sec::Claims::decode(&cook.value(), &request.state().config.jwt_secret).ok()
 }
 
 /// The catchall 404 handling route.

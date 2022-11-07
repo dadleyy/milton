@@ -71,9 +71,13 @@ pub async fn snapshot(request: Request<State>) -> Result {
     tide::Error::from_str(404, "not-found")
   })?;
 
+  if request.state().authority(&claims.oid).await.is_none() {
+    return Ok(tide::Response::new(404));
+  }
+
   log::info!("fetching snapshot for user '{}'", claims.oid);
 
-  let mut response = surf::get(&request.state().ui_config.octoprint_snapshot_url)
+  let mut response = surf::get(&request.state().config.octoprint_snapshot_url)
     .await
     .map_err(|error| {
       log::warn!("unable to request snapshot - {}", error);
@@ -104,8 +108,8 @@ pub async fn query(req: Request<State>) -> Result {
     tide::Error::from_str(404, "not-found")
   })?;
 
-  let mut res = surf::get(format!("{}/api/job", &req.state().ui_config.octoprint_api_url))
-    .header("X-Api-Key", &req.state().ui_config.octoprint_api_key)
+  let mut res = surf::get(format!("{}/api/job", &req.state().config.octoprint_api_url))
+    .header("X-Api-Key", &req.state().config.octoprint_api_key)
     .await
     .map_err(|error| {
       log::warn!("unable to issue request to octoprint - {}", error);

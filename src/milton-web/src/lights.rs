@@ -47,26 +47,33 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
   let mut empty_reads = 0;
   let mut last_debug = std::time::Instant::now();
   let mut last_configuration: Option<LightConfiguration> = None;
+  let mut last_connection_attempt = std::time::Instant::now();
 
   loop {
     match (connection.is_some(), last_configuration.as_ref()) {
       (false, Some(configuration)) => {
-        log::info!("attempting to establish serial connection to light controller: {configuration:?}");
+        if std::time::Instant::now()
+          .duration_since(last_connection_attempt)
+          .as_secs()
+          > 5
+        {
+          log::info!("attempting to establish serial connection to light controller: {configuration:?}");
+          last_connection_attempt = std::time::Instant::now();
+          connection = serialport::new(&configuration.device, configuration.baud)
+            .open()
+            .map_err(|error| {
+              log::warn!("unable to connect - {error}");
+              error
+            })
+            .and_then(|mut port| {
+              port
+                .set_timeout(std::time::Duration::from_millis(10))
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
 
-        connection = serialport::new(&configuration.device, configuration.baud)
-          .open()
-          .map_err(|error| {
-            log::error!("unable to connect - {error}");
-            error
-          })
-          .and_then(|mut port| {
-            port
-              .set_timeout(std::time::Duration::from_millis(10))
-              .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
-
-            Ok(port)
-          })
-          .ok();
+              Ok(port)
+            })
+            .ok();
+        }
       }
       _ => log::trace!("no reconnection necessary"),
     }
@@ -164,7 +171,7 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
 
     if std::time::Instant::now().duration_since(last_debug).as_secs() > 5 {
       last_debug = std::time::Instant::now();
-      log::debug!("empty reads since last debug: {empty_reads}");
+      log::debug!("empty effect channel reads since last debug: {empty_reads}");
       empty_reads = 0;
     }
 

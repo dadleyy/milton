@@ -56,7 +56,7 @@ async fn manage_effects(
 async fn serve(config: RuntimeConfiguration) -> Result<()> {
   log::info!("thread running, preparing channels");
   let server_effects = channel::bounded(1);
-  let light_effects = channel::bounded(2);
+  let light_effects = channel::bounded(10);
 
   log::info!("initializing server...");
   let server = milton::server::State::builder()

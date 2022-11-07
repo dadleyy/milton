@@ -132,6 +132,7 @@ pub async fn query(req: Request<State>) -> Result {
 
 /// ROUTE: sends command to heartbeat/light controls.
 pub async fn command(mut req: Request<State>) -> Result {
+  let mut timer = std::time::Instant::now();
   let claims = super::claims(&req).ok_or_else(|| {
     log::warn!("unauthorized attempt to commit command");
     tide::Error::from_str(404, "not-found")
@@ -141,6 +142,13 @@ pub async fn command(mut req: Request<State>) -> Result {
     log::warn!("unauthorized attempt to commit command");
     tide::Error::from_str(404, "not-found")
   })?;
+
+  log::debug!(
+    "loaded session authority in {} millis",
+    std::time::Instant::now().duration_since(timer).as_millis()
+  );
+
+  timer = std::time::Instant::now();
 
   let query = req.body_json::<ControlQuery>().await.map_err(|error| {
     log::warn!("unable to parse control payload - {}", error);
@@ -166,6 +174,11 @@ pub async fn command(mut req: Request<State>) -> Result {
     log::warn!("unable to send control effect - {error}");
     return Ok(tide::Response::new(500));
   }
+
+  log::debug!(
+    "sent control effect in {} millis",
+    std::time::Instant::now().duration_since(timer).as_millis()
+  );
 
   tide::Body::from_json(&ControlResponse::default()).map(|bod| Response::builder(200).body(bod).build())
 }

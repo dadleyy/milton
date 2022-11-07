@@ -9,8 +9,8 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     env:
-      LOGIN_URL: https://krumpled.com/printing/api/auth/start
-      LOGOUT_URL: https://krumpled.com/printing/api/auth/end
+      LOGIN_URL: https://www.krumpled.com/printing/api/auth/start
+      LOGOUT_URL: https://www.krumpled.com/printing/api/auth/end
       API_ROOT: /printing/api
       UI_ROOT: /printing/
       ASSET_ROOT: /printing/

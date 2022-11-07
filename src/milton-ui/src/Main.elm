@@ -335,7 +335,9 @@ header env session =
         [ Html.div []
             [ Html.div [] [ Html.text session.name ] ]
         , Html.div [ AT.class "ml-auto" ]
-            [ Html.a [ AT.href (env |> .logoutURL) ] [ Html.text "logout" ] ]
+            [ Html.a [ AT.href (env |> .logoutURL), AT.target "_self", AT.rel "noopener" ]
+                [ Html.text "logout" ]
+            ]
         ]
 
 

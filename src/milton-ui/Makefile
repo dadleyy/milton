@@ -12,24 +12,27 @@ DEBUG_BUILD_DIR=target/debug
 RELEASE_BUILD_DIR=target/release
 
 ELM_SOURCES=$(wildcard src/Main.elm src/*.elm)
+IMG_SOURCES=$(wildcard static/*.png)
 
 DEBUG_MAIN=$(DEBUG_BUILD_DIR)/main.js
 DEBUG_BOOT=$(DEBUG_BUILD_DIR)/boot.js
 DEBUG_CSS=$(DEBUG_BUILD_DIR)/main.css
 DEBUG_HTML=$(DEBUG_BUILD_DIR)/index.html
+DEBUG_IMG=$(subst static,$(DEBUG_BUILD_DIR),$(IMG_SOURCES))
 
 RELEASE_MAIN=$(subst $(DEBUG_BUILD_DIR),$(RELEASE_BUILD_DIR),$(DEBUG_MAIN))
 RELEASE_BOOT=$(subst $(DEBUG_BUILD_DIR),$(RELEASE_BUILD_DIR),$(DEBUG_BOOT))
 RELEASE_CSS=$(subst $(DEBUG_BUILD_DIR),$(RELEASE_BUILD_DIR),$(DEBUG_CSS))
 RELEASE_HTML=$(subst $(DEBUG_BUILD_DIR),$(RELEASE_BUILD_DIR),$(DEBUG_HTML))
+RELEASE_IMG=$(subst static,$(RELEASE_BUILD_DIR),$(IMG_SOURCES))
 
 .PHONY: all debug clean fmt test release
 
 all: debug
 
-debug: $(DEBUG_MAIN) $(DEBUG_CSS) $(DEBUG_HTML) $(DEBUG_BOOT)
+debug: $(DEBUG_MAIN) $(DEBUG_CSS) $(DEBUG_HTML) $(DEBUG_BOOT) $(DEBUG_IMG)
 
-release: $(RELEASE_MAIN) $(RELEASE_BOOT) $(RELEASE_CSS) $(RELEASE_HTML)
+release: $(RELEASE_MAIN) $(RELEASE_BOOT) $(RELEASE_CSS) $(RELEASE_HTML) $(RELEASE_IMG)
 
 $(DEBUG_MAIN): $(ELM_SOURCES)
 	mkdir -p $(DEBUG_BUILD_DIR)
@@ -47,6 +50,12 @@ $(DEBUG_HTML): src/index.xml src/index.xslt
 		--stringparam uiRoot ${UI_ROOT}  \
 		--stringparam assetRoot ${ASSET_ROOT}  \
 		-o $@ $<
+
+$(DEBUG_BUILD_DIR)/%.png: static/%.png
+	cp $< $@
+
+$(RELEASE_BUILD_DIR)/%.png: static/%.png
+	cp $< $@
 
 $(DEBUG_BOOT): src/boot.ts tsconfig.json $(wildcard @types/*.ts)
 	$(NPM) run tsc -- -p tsconfig.json --outDir $(DEBUG_BUILD_DIR)
@@ -75,6 +84,8 @@ clean:
 	rm -f $(RELEASE_BOOT)
 	rm -f $(RELEASE_CSS)
 	rm -f $(RELEASE_HTML)
+	rm -f $(DEBUG_IMG)
+	rm -f $(RELEASE_IMG)
 
 fmt:
 	$(NPM) run lint:elm -- --yes

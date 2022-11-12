@@ -2,6 +2,7 @@
 name = "milton"
 # not using version field; this is an application for now; sha is fine.
 version = "0.0.0"
+authors = ["Danny Hadley <dadleyy@gmail.com>"]
 edition = "2021"
 publish = false
 

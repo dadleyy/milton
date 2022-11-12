@@ -1,0 +1,44 @@
+[lights]
+# the kernel managed location of our serial device for the xiao light MCU
+device=""
+baud=115200
+
+[oauth]
+# client id + secret for the "general" auth0 application used for oauth
+auth_client_id=""
+auth_client_secret=""
+
+# client id + secret for the auth0 _management_ api
+management_client_id=""
+management_client_secret=""
+
+# the redirect uri that our auth0 application is configured for. needs to match a value in the list of 
+# redirect uri's allowed on their end.
+redirect_uri=""
+
+# the auth0 application domain.
+domain=""
+
+[server]
+# octoprint general api access info
+octoprint_api_url=""
+octoprint_api_key=""
+
+# the token that octoprint can use in its 'stream url" to have access to our stream endpoint
+octoprint_stream_token=""
+
+# where to send users after completing their oauth exchange
+auth_complete_uri=""
+
+# a secret string used to validate jwt tokens used in our http cookie store.
+jwt_secret=""
+
+# ...
+domain=""
+
+# redis configuration used for our session store
+redis_host=""
+redis_port=6379
+
+# the kernel managed device path for our streaming endpoint
+video_device=""

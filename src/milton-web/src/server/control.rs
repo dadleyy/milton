@@ -96,7 +96,7 @@ pub async fn snapshot(request: Request<State>) -> Result {
   }
 
   // Create the channel whose receiver will be used as a async reader.
-  let (mut writer, drain) = futures::channel::mpsc::channel::<io::Result<Vec<u8>>>(1);
+  let (mut writer, drain) = futures::channel::mpsc::channel::<io::Result<Vec<u8>>>(5);
   let buf_drain = futures::stream::TryStreamExt::into_async_read(drain);
 
   // Prepare the response with the correct header
@@ -108,12 +108,27 @@ pub async fn snapshot(request: Request<State>) -> Result {
   // In a separate task, continously check our shared buffer's timestamp. If that value differs
   // from the timestamp of the last message sent on our end, send a new multipart chunk.
   async_std::task::spawn(async move {
+    log::debug!("spawned client mjpeg stream handler for {:?}", request.remote());
+
     let frame_reader = request.state().video_data.read().await;
     let mut last_frame = (*frame_reader).0;
     drop(frame_reader);
 
+    let mut last_debug = std::time::Instant::now();
+    let mut dropped_frames = 0u32;
+    let mut sent_frames = 0u32;
+
     loop {
+      let now = std::time::Instant::now();
       let frame_reader = request.state().video_data.read().await;
+
+      if now.duration_since(last_debug).as_secs() > 1 {
+        log::debug!("client debug; [dropped: {dropped_frames}] [sent {sent_frames}]");
+        last_debug = now;
+        dropped_frames = 0;
+        sent_frames = 0;
+      }
+
       if (*frame_reader).0 != last_frame {
         last_frame = (*frame_reader).0;
 
@@ -130,9 +145,16 @@ pub async fn snapshot(request: Request<State>) -> Result {
         buffer.extend_from_slice(b"\r\n");
 
         if let Err(error) = writer.try_send(Ok(buffer)) {
+          if error.is_full() {
+            dropped_frames += 1;
+            continue;
+          }
+
           log::warn!("unable to send received data - {error}");
           break;
         }
+
+        sent_frames += 1;
       }
       drop(frame_reader);
     }

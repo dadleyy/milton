@@ -5,7 +5,7 @@ use tide::{Request, Response, Result};
 use crate::{octoprint::OctoprintJobResponse, server::State};
 
 /// The stream endpoint will use this as the http multi-part boundary for its mjpg stream.
-const MJPG_BOUNDARY: &str = "mjpg-boundary";
+const MJPG_BOUNDARY: &str = "mjpg-boundary-do-not-cross";
 
 /// Requests to the control api will receive this type serialized as json.
 #[derive(Debug, Serialize)]

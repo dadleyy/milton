@@ -100,8 +100,10 @@ pub async fn identify(request: Request<State>) -> Result {
   });
 
   log::info!("attempting to identify user from claims - {:?}", claims);
-  let mut res = AuthIdentifyResponse::default();
-  res.version = request.state().version.clone();
+  let mut res = AuthIdentifyResponse {
+    version: request.state().version.clone(),
+    ..Default::default()
+  };
 
   if let Some(claims) = claims {
     let session_data = request.state().user_from_session(&claims.oid).await.ok_or_else(|| {

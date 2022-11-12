@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
+use std::io;
 use tide::{Request, Response, Result};
 
 use crate::{octoprint::OctoprintJobResponse, server::State};
+
+const BOUNDARY: &str = "mjpg-boundary";
 
 /// Requests to the control api will receive this type serialized as json.
 #[derive(Debug, Serialize)]
@@ -75,30 +78,50 @@ pub async fn snapshot(request: Request<State>) -> Result {
     return Ok(tide::Response::new(404));
   }
 
-  log::info!("fetching snapshot for user '{}'", claims.oid);
+  // Create the channel whose receiver will be used as a async reader.
+  let (mut writer, drain) = futures::channel::mpsc::channel::<io::Result<Vec<u8>>>(1);
+  let buf_drain = futures::stream::TryStreamExt::into_async_read(drain);
 
-  let mut response = surf::get(&request.state().config.octoprint_snapshot_url)
-    .await
-    .map_err(|error| {
-      log::warn!("unable to request snapshot - {}", error);
-      tide::Error::from_str(404, "not-found")
-    })?;
+  // Prepare the response with the correct header
+  let response = tide::Response::builder(200)
+    .content_type(format!("multipart/x-mixed-replace;boundary={BOUNDARY}").as_str())
+    .body(tide::Body::from_reader(buf_drain, None))
+    .build();
 
-  log::info!("snapshot done");
+  // In a separate task, continously check our shared buffer's timestamp. If that value differs
+  // from the timestamp of the last message sent on our end, send a new multipart chunk.
+  async_std::task::spawn(async move {
+    let frame_reader = request.state().video_data.read().await;
+    let mut last_frame = (*frame_reader).0;
+    drop(frame_reader);
 
-  let mime = response.content_type().ok_or_else(|| {
-    std::io::Error::new(
-      std::io::ErrorKind::Other,
-      "unable to determine mime type from mjpg-streamer",
-    )
-  })?;
+    loop {
+      let frame_reader = request.state().video_data.read().await;
+      if (*frame_reader).0 != last_frame {
+        last_frame = (*frame_reader).0;
 
-  Ok(
-    tide::Response::builder(response.status())
-      .content_type(mime)
-      .body(response.take_body())
-      .build(),
-  )
+        // Start the buffer that we'll send using the boundary and some multi-part http header
+        // context.
+        let mut buffer = format!(
+          "--{BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+          frame_reader.1.len(),
+        )
+        .into_bytes();
+
+        // Actually push the JPEG data into our buffer.
+        buffer.extend_from_slice(frame_reader.1.as_slice());
+        buffer.extend_from_slice(b"\r\n");
+
+        if let Err(error) = writer.try_send(Ok(buffer)) {
+          log::warn!("unable to send received data - {error}");
+          break;
+        }
+      }
+      drop(frame_reader);
+    }
+  });
+
+  Ok(response)
 }
 
 /// ROUTE: fetches current job information from octoprint api

@@ -4,7 +4,8 @@ use tide::{Request, Response, Result};
 
 use crate::{octoprint::OctoprintJobResponse, server::State};
 
-const BOUNDARY: &str = "mjpg-boundary";
+/// The stream endpoint will use this as the http multi-part boundary for its mjpg stream.
+const MJPG_BOUNDARY: &str = "mjpg-boundary";
 
 /// Requests to the control api will receive this type serialized as json.
 #[derive(Debug, Serialize)]
@@ -52,6 +53,14 @@ enum ControlQuery {
   BasicColor(ColorControlQuery),
 }
 
+/// Accessing the snapshot endpoint is something that we'd like octoprint to be able to do, in
+/// addition to users authorized through the ui via http cookies.
+#[derive(Deserialize, Debug)]
+struct SnapshotUrlQuery {
+  /// The optional authorization token we're using to access the control mjpg stream.
+  token: Option<String>,
+}
+
 // TODO: this will be useful once we're able to control specific colors. blocked by firmware.
 // fn parse_hex(input: &String) -> Option<(u8, u8, u8)> {
 //   let mut results = (1..input.len())
@@ -69,13 +78,21 @@ enum ControlQuery {
 
 /// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
 pub async fn snapshot(request: Request<State>) -> Result {
-  let claims = super::claims(&request).ok_or_else(|| {
-    log::warn!("unauthorized attempt to query state");
-    tide::Error::from_str(404, "not-found")
-  })?;
+  // TODO: replace this with a more robust application auth token storage + validation system.
+  match request.query::<SnapshotUrlQuery>() {
+    Ok(query) if query.token.is_some() && query.token == request.state().config.octoprint_stream_token => {
+      log::info!("authorizing stream as octoprint");
+    }
+    _ => {
+      let claims = super::claims(&request).ok_or_else(|| {
+        log::warn!("unauthorized attempt to access camera control");
+        tide::Error::from_str(404, "not-found")
+      })?;
 
-  if request.state().authority(&claims.oid).await.is_none() {
-    return Ok(tide::Response::new(404));
+      if request.state().authority(&claims.oid).await.is_none() {
+        return Ok(tide::Response::new(404));
+      }
+    }
   }
 
   // Create the channel whose receiver will be used as a async reader.
@@ -84,7 +101,7 @@ pub async fn snapshot(request: Request<State>) -> Result {
 
   // Prepare the response with the correct header
   let response = tide::Response::builder(200)
-    .content_type(format!("multipart/x-mixed-replace;boundary={BOUNDARY}").as_str())
+    .content_type(format!("multipart/x-mixed-replace;boundary={MJPG_BOUNDARY}").as_str())
     .body(tide::Body::from_reader(buf_drain, None))
     .build();
 
@@ -103,7 +120,7 @@ pub async fn snapshot(request: Request<State>) -> Result {
         // Start the buffer that we'll send using the boundary and some multi-part http header
         // context.
         let mut buffer = format!(
-          "--{BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+          "--{MJPG_BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
           frame_reader.1.len(),
         )
         .into_bytes();

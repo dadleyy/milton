@@ -52,6 +52,10 @@ pub struct Configuration {
 
   /// The kernel managed device path compatible with v4l.
   video_device: Option<String>,
+
+  /// A special token to be used by octoprint for our mjpg stream endpoint. This should be a
+  /// short-lived feature and replaced with a more robust application auth token system.
+  octoprint_stream_token: Option<String>,
 }
 
 /// The builder-pattern impl for our shared `State` type.
@@ -267,7 +271,7 @@ where
   S: std::convert::AsRef<str>,
 {
   if let Some(path) = &state.config.video_device {
-    let dev = v4l::Device::with_path(&path)?;
+    let dev = v4l::Device::with_path(path)?;
     let mut has_support = false;
 
     'outer: for format in dev.enum_formats()? {

@@ -3,6 +3,8 @@ use std::io::{Error, ErrorKind, Result};
 use async_std::channel::Sender;
 use serde::Deserialize;
 use tide::{http::Cookie, Request, Response};
+use v4l::io::traits::CaptureStream;
+use v4l::video::Capture;
 
 use crate::oauth;
 
@@ -33,9 +35,6 @@ pub struct Configuration {
   /// API key for octoprint. (e.g abcdef)
   octoprint_api_key: String,
 
-  /// mjpg-streamer url. (e.g http://192.168.2.27:8090/?action=stream)
-  octoprint_snapshot_url: String,
-
   /// The location to send users _back_ to after successful oauth exchanges.
   auth_complete_uri: String,
 
@@ -50,6 +49,13 @@ pub struct Configuration {
 
   /// The domain we're hosting from; used for cookies.
   domain: String,
+
+  /// The kernel managed device path compatible with v4l.
+  video_device: Option<String>,
+
+  /// A special token to be used by octoprint for our mjpg stream endpoint. This should be a
+  /// short-lived feature and replaced with a more robust application auth token system.
+  octoprint_stream_token: Option<String>,
 }
 
 /// The builder-pattern impl for our shared `State` type.
@@ -116,6 +122,8 @@ impl StateBuilder {
         .ok_or_else(|| Error::new(ErrorKind::NotFound, "no version provided"))?,
 
       redis: async_std::sync::Arc::new(async_std::sync::Mutex::new(None)),
+
+      video_data: async_std::sync::Arc::new(async_std::sync::RwLock::new((None, Vec::with_capacity(0)))),
     })
   }
 }
@@ -140,6 +148,9 @@ pub struct State {
   /// A shared tcp connection to our redis connection. This eventually should be expanded into a
   /// pool of available tcp connections.
   redis: async_std::sync::Arc<async_std::sync::Mutex<Option<async_std::net::TcpStream>>>,
+
+  /// A shared reference to our video data, should a request need one.
+  video_data: async_std::sync::Arc<async_std::sync::RwLock<(Option<std::time::Instant>, Vec<u8>)>>,
 }
 
 impl State {
@@ -181,6 +192,8 @@ impl State {
     Ok(output)
   }
 
+  /// This function is responsible for taking the unique id found in our session cookie and
+  /// returning the user data that we have previously stored in redis.
   pub(crate) async fn user_from_session<T>(&self, id: T) -> Option<auth::AuthIdentifyResponseUserInfo>
   where
     T: std::fmt::Display,
@@ -257,6 +270,70 @@ pub async fn listen<S>(state: State, addr: S) -> std::io::Result<()>
 where
   S: std::convert::AsRef<str>,
 {
+  if let Some(path) = &state.config.video_device {
+    let dev = v4l::Device::with_path(path)?;
+    let mut has_support = false;
+
+    'outer: for format in dev.enum_formats()? {
+      for framesize in dev.enum_framesizes(format.fourcc)? {
+        for discrete in framesize.size.to_discrete() {
+          if format.fourcc == v4l::format::FourCC::new(b"MJPG") {
+            log::info!("found mjpg compatible format on {path}");
+            dev.set_format(&v4l::Format::new(
+              discrete.width,
+              discrete.width,
+              v4l::format::FourCC::new(b"MJPG"),
+            ))?;
+            has_support = true;
+            break 'outer;
+          }
+        }
+      }
+    }
+
+    if has_support {
+      let clone_ref = state.video_data.clone();
+      let mut stream = v4l::prelude::MmapStream::with_buffers(&dev, v4l::buffer::Type::VideoCapture, 4)?;
+
+      async_std::task::spawn(async move {
+        log::info!("video data read thread active");
+        let mut last_debug = std::time::Instant::now();
+
+        let mut current_frames = 0;
+        loop {
+          let before = std::time::Instant::now();
+
+          match stream.next() {
+            Ok((buffer, meta)) => {
+              let after = std::time::Instant::now();
+              let seconds_since = before.duration_since(last_debug).as_secs();
+              current_frames += 1;
+
+              let mut writable_reference = clone_ref.write().await;
+              // log::debug!("read video device meta - {}bytes", meta.bytesused);
+              *writable_reference = (Some(std::time::Instant::now()), buffer.to_vec());
+              drop(writable_reference);
+
+              if seconds_since > 3 {
+                let frame_read_time = after.duration_since(before).as_millis();
+                log::info!(
+                  "{current_frames}f ({seconds_since}s) {frame_read_time}ms per {}bytes",
+                  meta.bytesused
+                );
+                last_debug = before;
+                current_frames = 0;
+              }
+            }
+            Err(error) => {
+              log::error!("unable to read next stream from video device - {error}");
+              async_std::task::sleep(std::time::Duration::from_millis(500)).await;
+            }
+          }
+        }
+      });
+    }
+  }
+
   let mut app = tide::with_state(state);
 
   app.at("/control").post(control::command);

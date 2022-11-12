@@ -10,14 +10,17 @@ use async_std::stream::StreamExt;
 struct RuntimeConfiguration {
   #[allow(unused)]
   lights: milton::lights::LightConfiguration,
+
   oauth: milton::oauth::AuthZeroConfig,
+
   server: milton::server::Configuration,
 }
 
 #[derive(Deserialize, clap::Parser)]
+#[command(author, version = option_env!("MILTON_VERSION").unwrap_or_else(|| "dev"), about, long_about = None)]
 struct CommandLineOptions {
+  #[arg(short = 'c', long)]
   config: String,
-  device: Option<String>,
 }
 
 async fn manage_effects(
@@ -103,11 +106,7 @@ fn main() -> Result<()> {
   log::info!("loading config from '{}'", args.config);
   let contents = std::fs::read_to_string(args.config)?;
   log::info!("loaded config from '{contents}'");
-  let mut parsed = toml::from_str::<RuntimeConfiguration>(&contents)?;
-
-  if let Some(device) = args.device {
-    parsed.lights.device = device;
-  }
+  let parsed = toml::from_str::<RuntimeConfiguration>(&contents)?;
 
   log::info!("starting async main thread");
   async_std::task::block_on(serve(parsed))?;

@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
+use std::io;
 use tide::{Request, Response, Result};
 
 use crate::{octoprint::OctoprintJobResponse, server::State};
+
+/// The stream endpoint will use this as the http multi-part boundary for its mjpg stream.
+const MJPG_BOUNDARY: &str = "mjpg-boundary";
 
 /// Requests to the control api will receive this type serialized as json.
 #[derive(Debug, Serialize)]
@@ -49,6 +53,14 @@ enum ControlQuery {
   BasicColor(ColorControlQuery),
 }
 
+/// Accessing the snapshot endpoint is something that we'd like octoprint to be able to do, in
+/// addition to users authorized through the ui via http cookies.
+#[derive(Deserialize, Debug)]
+struct SnapshotUrlQuery {
+  /// The optional authorization token we're using to access the control mjpg stream.
+  token: Option<String>,
+}
+
 // TODO: this will be useful once we're able to control specific colors. blocked by firmware.
 // fn parse_hex(input: &String) -> Option<(u8, u8, u8)> {
 //   let mut results = (1..input.len())
@@ -66,39 +78,67 @@ enum ControlQuery {
 
 /// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
 pub async fn snapshot(request: Request<State>) -> Result {
-  let claims = super::claims(&request).ok_or_else(|| {
-    log::warn!("unauthorized attempt to query state");
-    tide::Error::from_str(404, "not-found")
-  })?;
+  // TODO: replace this with a more robust application auth token storage + validation system.
+  match request.query::<SnapshotUrlQuery>() {
+    Ok(query) if query.token.is_some() && query.token == request.state().config.octoprint_stream_token => {
+      log::info!("authorizing stream as octoprint");
+    }
+    _ => {
+      let claims = super::claims(&request).ok_or_else(|| {
+        log::warn!("unauthorized attempt to access camera control");
+        tide::Error::from_str(404, "not-found")
+      })?;
 
-  if request.state().authority(&claims.oid).await.is_none() {
-    return Ok(tide::Response::new(404));
+      if request.state().authority(&claims.oid).await.is_none() {
+        return Ok(tide::Response::new(404));
+      }
+    }
   }
 
-  log::info!("fetching snapshot for user '{}'", claims.oid);
+  // Create the channel whose receiver will be used as a async reader.
+  let (mut writer, drain) = futures::channel::mpsc::channel::<io::Result<Vec<u8>>>(1);
+  let buf_drain = futures::stream::TryStreamExt::into_async_read(drain);
 
-  let mut response = surf::get(&request.state().config.octoprint_snapshot_url)
-    .await
-    .map_err(|error| {
-      log::warn!("unable to request snapshot - {}", error);
-      tide::Error::from_str(404, "not-found")
-    })?;
+  // Prepare the response with the correct header
+  let response = tide::Response::builder(200)
+    .content_type(format!("multipart/x-mixed-replace;boundary={MJPG_BOUNDARY}").as_str())
+    .body(tide::Body::from_reader(buf_drain, None))
+    .build();
 
-  log::info!("snapshot done");
+  // In a separate task, continously check our shared buffer's timestamp. If that value differs
+  // from the timestamp of the last message sent on our end, send a new multipart chunk.
+  async_std::task::spawn(async move {
+    let frame_reader = request.state().video_data.read().await;
+    let mut last_frame = (*frame_reader).0;
+    drop(frame_reader);
 
-  let mime = response.content_type().ok_or_else(|| {
-    std::io::Error::new(
-      std::io::ErrorKind::Other,
-      "unable to determine mime type from mjpg-streamer",
-    )
-  })?;
+    loop {
+      let frame_reader = request.state().video_data.read().await;
+      if (*frame_reader).0 != last_frame {
+        last_frame = (*frame_reader).0;
 
-  Ok(
-    tide::Response::builder(response.status())
-      .content_type(mime)
-      .body(response.take_body())
-      .build(),
-  )
+        // Start the buffer that we'll send using the boundary and some multi-part http header
+        // context.
+        let mut buffer = format!(
+          "--{MJPG_BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+          frame_reader.1.len(),
+        )
+        .into_bytes();
+
+        // Actually push the JPEG data into our buffer.
+        buffer.extend_from_slice(frame_reader.1.as_slice());
+        buffer.extend_from_slice(b"\r\n");
+
+        if let Err(error) = writer.try_send(Ok(buffer)) {
+          log::warn!("unable to send received data - {error}");
+          break;
+        }
+      }
+      drop(frame_reader);
+    }
+  });
+
+  Ok(response)
 }
 
 /// ROUTE: fetches current job information from octoprint api

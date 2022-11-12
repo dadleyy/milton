@@ -2,6 +2,7 @@
 name = "milton"
 # not using version field; this is an application for now; sha is fine.
 version = "0.0.0"
+authors = ["Danny Hadley <dadleyy@gmail.com>"]
 edition = "2021"
 publish = false
 
@@ -29,3 +30,5 @@ dotenv = "^0.15.0"
 serialport = { version = "^4.2.0", default-features = false }
 clap = { version = "^4.0.18", features = ["derive"] }
 kramer = { version = "^1.3.2", features = ["async-std", "kramer-async"] }
+futures = { version = "^0.3.25" }
+v4l = { version = "^0.13.0", features = ["v4l2"] }

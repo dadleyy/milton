@@ -45,8 +45,15 @@ type Request
     | NotAsked
 
 
+type ImageMode
+    = Stream
+    | Snapshot
+
+
 type alias HomePage =
-    { lastRequest : Request }
+    { lastRequest : Request
+    , imageMode : ImageMode
+    }
 
 
 type Page
@@ -70,6 +77,7 @@ type Message
     = LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
     | ToggleLight LightRequest
+    | ToggleImageMode
     | SessionLoaded (Result Http.Error SessionPayload)
     | CommandResponse (Result Http.Error ())
     | Tick Time.Posix
@@ -106,10 +114,27 @@ update message model =
         Tick _ ->
             ( model, Cmd.none )
 
+        ToggleImageMode ->
+            case model of
+                Authorized (Home homeState) _ session ->
+                    let
+                        newMode =
+                            case homeState.imageMode of
+                                Stream ->
+                                    Snapshot
+
+                                Snapshot ->
+                                    Stream
+                    in
+                    ( Authorized (Home (HomePage homeState.lastRequest newMode)) env session, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
         CommandResponse result ->
             case model of
                 Authorized (Home homeState) _ session ->
-                    ( Authorized (Home (HomePage (Done result))) env session, Cmd.none )
+                    ( Authorized (Home (HomePage (Done result) homeState.imageMode)) env session, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -134,7 +159,7 @@ update message model =
                             ( model, Cmd.none )
 
                         _ ->
-                            ( Authorized (Home (HomePage Pending)) env session, makeLightRequest env lightState )
+                            ( Authorized (Home (HomePage Pending homeState.imageMode)) env session, makeLightRequest env lightState )
 
                 _ ->
                     ( model, Cmd.none )
@@ -175,7 +200,7 @@ modelFromSessionPayload : Environment -> SessionPayload -> ( Model, Cmd Message 
 modelFromSessionPayload env payload =
     case payload.ok of
         True ->
-            ( Maybe.map (Authorized (Home (HomePage NotAsked)) env) payload.session.user
+            ( Maybe.map (Authorized (Home (HomePage NotAsked Stream)) env) payload.session.user
                 |> Maybe.withDefault (Unauthorized env)
             , Cmd.none
             )
@@ -216,7 +241,7 @@ sessionDecoder =
 
 viewFooter : Model -> Html.Html Message
 viewFooter model =
-    Html.footer [ AT.class "footer fixed bottom-0 left-0 w-full" ]
+    Html.footer [ AT.class "footer fixed bottom-0 left-0 w-full bg-slate-800" ]
         [ Html.div [ AT.class "flex items-center px-3 py-2 border-t border-solid border-slate-800" ]
             [ Html.div [ AT.class "ml-auto" ]
                 [ Html.a [ AT.href "https://github.com/dadleyy/milton", AT.rel "noopener", AT.target "_blank" ]
@@ -270,7 +295,7 @@ viewPage page env session =
             in
             Html.div [ AT.class "pt-8 flex items-center flex-col w-full h-full" ]
                 [ Html.div [ AT.class "mx-auto" ]
-                    [ Html.img [ AT.src (env.apiRoot ++ "/control/snapshot") ] [] ]
+                    [ imageControl env homePage ]
                 , Html.div [ AT.class "mx-auto flex items-center mt-4" ]
                     [ Html.div [ AT.class "mr-1" ]
                         [ Button.view
@@ -381,3 +406,26 @@ makeLightRequest env lightState =
         , url = env.apiRoot ++ "/control"
         , expect = Http.expectWhatever CommandResponse
         }
+
+
+imageControl : Environment -> HomePage -> Html.Html Message
+imageControl env homePage =
+    let
+        buttonIcon =
+            case homePage.imageMode of
+                Stream ->
+                    Button.Camera
+
+                Snapshot ->
+                    Button.Video
+    in
+    Html.div []
+        [ Html.div [ AT.class "mx-auto text-center justify-center mb-2" ]
+            [ Html.div [ AT.class "inline-block" ] [ Button.view ( Button.Icon buttonIcon ToggleImageMode, Button.Primary ) ] ]
+        , case homePage.imageMode of
+            Stream ->
+                Html.img [ AT.src (env.apiRoot ++ "/control/video-stream") ] []
+
+            Snapshot ->
+                Html.img [ AT.src (env.apiRoot ++ "/control/video-snapshot") ] []
+        ]

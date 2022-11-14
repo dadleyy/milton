@@ -19,6 +19,9 @@ pub mod control;
 /// General type definition for side effects.
 pub mod effects;
 
+/// TODO: move this to a more general video module.
+mod huffman;
+
 /// An authenticated user will have varying levels of authority. Currently the only distinction
 /// we're making is an admin, to which all functionality is available.
 pub(crate) enum Authority {
@@ -123,9 +126,24 @@ impl StateBuilder {
 
       redis: async_std::sync::Arc::new(async_std::sync::Mutex::new(None)),
 
-      video_data: async_std::sync::Arc::new(async_std::sync::RwLock::new((None, Vec::with_capacity(0)))),
+      video: VideoState {
+        data: async_std::sync::Arc::new(async_std::sync::RwLock::new((None, Vec::with_capacity(0)))),
+        semaphores: None,
+      },
     })
   }
+}
+
+/// The video state is a shared structure representing our underlying data and channels used to
+/// communicate frame readiness.
+#[derive(Clone)]
+struct VideoState {
+  /// The underlying timestamp and data of our last video frame.
+  data: async_std::sync::Arc<async_std::sync::RwLock<(Option<std::time::Instant>, Vec<u8>)>>,
+
+  /// The sender of per-request semaphare channels whose receiver will be polled in our video frame
+  /// loop and updated.
+  semaphores: Option<async_std::channel::Sender<async_std::channel::Sender<()>>>,
 }
 
 /// The `State` here represents all shared types that are used across web requests. Requires that
@@ -150,7 +168,7 @@ pub struct State {
   redis: async_std::sync::Arc<async_std::sync::Mutex<Option<async_std::net::TcpStream>>>,
 
   /// A shared reference to our video data, should a request need one.
-  video_data: async_std::sync::Arc<async_std::sync::RwLock<(Option<std::time::Instant>, Vec<u8>)>>,
+  video: VideoState,
 }
 
 impl State {
@@ -266,7 +284,7 @@ pub(crate) async fn missing(req: Request<State>) -> tide::Result {
 
 /// This is the main entry point for the http server responsible for setting up routes and binding
 /// our shared state to the tcp listener.
-pub async fn listen<S>(state: State, addr: S) -> std::io::Result<()>
+pub async fn listen<S>(mut state: State, addr: S) -> std::io::Result<()>
 where
   S: std::convert::AsRef<str>,
 {
@@ -281,7 +299,7 @@ where
             log::info!("found mjpg compatible format on {path}");
             dev.set_format(&v4l::Format::new(
               discrete.width,
-              discrete.width,
+              discrete.height,
               v4l::format::FourCC::new(b"MJPG"),
             ))?;
             has_support = true;
@@ -292,14 +310,18 @@ where
     }
 
     if has_support {
-      let clone_ref = state.video_data.clone();
+      let clone_ref = state.video.clone();
       let mut stream = v4l::prelude::MmapStream::with_buffers(&dev, v4l::buffer::Type::VideoCapture, 4)?;
+
+      let (sema_sender, sema_receiver) = async_std::channel::unbounded();
+      state.video.semaphores = Some(sema_sender);
 
       async_std::task::spawn(async move {
         log::info!("video data read thread active");
         let mut last_debug = std::time::Instant::now();
-
         let mut current_frames = 0;
+        let mut listeners = vec![];
+
         loop {
           let before = std::time::Instant::now();
 
@@ -309,10 +331,55 @@ where
               let seconds_since = before.duration_since(last_debug).as_secs();
               current_frames += 1;
 
-              let mut writable_reference = clone_ref.write().await;
-              // log::debug!("read video device meta - {}bytes", meta.bytesused);
-              *writable_reference = (Some(std::time::Instant::now()), buffer.to_vec());
+              let mut normalized = Vec::with_capacity(buffer.len());
+              let mut i = 0;
+
+              while i < 2048 {
+                if buffer[i] == 0xff && buffer[i + 1] == 0xC4 {
+                  log::info!("found huffman in raw camera payload");
+                  break;
+                }
+
+                // If we're at the start of "start of frame" marker, toss our default huffman table into
+                // the buffer.
+                if buffer[i] == 0xff && buffer[i + 1] == 0xC0 {
+                  normalized.extend_from_slice(&huffman::HUFFMAN);
+                  break;
+                }
+
+                normalized.push(buffer[i]);
+                i += 1;
+              }
+
+              // Copy the remainder of our buffer into the normalized data.
+              normalized.extend_from_slice(&buffer[i..meta.bytesused as usize]);
+
+              let mut writable_reference = clone_ref.data.write().await;
+              *writable_reference = (Some(std::time::Instant::now()), normalized);
               drop(writable_reference);
+
+              // See if we have any new web connections waiting to register their semaphore receivers.
+              if let Ok(lisener) = sema_receiver.try_recv() {
+                listeners.push(lisener);
+              }
+
+              // Iterate over any listener, sending our semaphore alone.
+              if !listeners.is_empty() {
+                let mut next = vec![];
+
+                for listener in listeners.drain(0..) {
+                  if listener.is_closed() {
+                    continue;
+                  }
+
+                  // Keep this semaphore channel around if we were able to send.
+                  if listener.send(()).await.is_ok() {
+                    next.push(listener);
+                  }
+                }
+
+                listeners = next;
+              }
 
               if seconds_since > 3 {
                 let frame_read_time = after.duration_since(before).as_millis();
@@ -338,7 +405,8 @@ where
 
   app.at("/control").post(control::command);
   app.at("/control").get(control::query);
-  app.at("/control/snapshot").get(control::snapshot);
+  app.at("/control/video-stream").get(control::stream);
+  app.at("/control/video-snapshot").get(control::snapshot);
 
   app.at("/auth/start").get(auth::start);
   app.at("/auth/end").get(auth::end);

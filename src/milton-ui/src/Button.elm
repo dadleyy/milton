@@ -9,6 +9,8 @@ type ButtonIcon
     = LightOn
     | LightOff
     | CircleDot
+    | Video
+    | Camera
 
 
 type Button a
@@ -82,6 +84,12 @@ view kind =
 iconClass : ButtonIcon -> String
 iconClass kind =
     case kind of
+        Video ->
+            "fa-solid fa-video"
+
+        Camera ->
+            "fa-solid fa-camera"
+
         CircleDot ->
             "fa-solid fa-circle-dot"
 

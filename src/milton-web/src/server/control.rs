@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::io;
 use tide::{Request, Response, Result};
 
 use crate::{octoprint::OctoprintJobResponse, server::State};
@@ -76,7 +75,7 @@ struct SnapshotUrlQuery {
 //     .map(|((r, g), b)| (r, g, b))
 // }
 
-/// ROUTE: proxy to octoprint (mjpg-streamer) snapshot url
+/// ROUTE: return jpeg snapshot
 pub async fn snapshot(request: Request<State>) -> Result {
   // TODO: replace this with a more robust application auth token storage + validation system.
   match request.query::<SnapshotUrlQuery>() {
@@ -95,12 +94,55 @@ pub async fn snapshot(request: Request<State>) -> Result {
     }
   }
 
+  let frame_reader = request.state().video.data.read().await;
+  let buffer = frame_reader.1.clone();
+  drop(frame_reader);
+
+  // Prepare the response with the correct header
+  Ok(
+    tide::Response::builder(200)
+      .header("Access-Control-Allow-Origin", "*")
+      .content_type("image/jpeg")
+      .body(buffer)
+      .build(),
+  )
+}
+
+/// ROUTE: mjpeg stream
+pub async fn stream(request: Request<State>) -> Result {
+  // TODO: replace this with a more robust application auth token storage + validation system.
+  match request.query::<SnapshotUrlQuery>() {
+    Ok(query) if query.token.is_some() && query.token == request.state().config.octoprint_stream_token => {
+      log::info!("authorizing stream as octoprint");
+    }
+    _ => {
+      let claims = super::claims(&request).ok_or_else(|| {
+        log::warn!("unauthorized attempt to access camera control");
+        tide::Error::from_str(404, "not-found")
+      })?;
+
+      if request.state().authority(&claims.oid).await.is_none() {
+        return Ok(tide::Response::new(404));
+      }
+    }
+  }
+
+  let semaphores = match &request.state().video.semaphores {
+    None => return Ok(tide::Response::new(404)),
+    Some(sema) => sema,
+  };
+
+  // Create our semaphore channel and send it back out to our main server thread.
+  let (ss, sr) = async_std::channel::unbounded();
+  semaphores.send(ss).await?;
+
   // Create the channel whose receiver will be used as a async reader.
-  let (mut writer, drain) = futures::channel::mpsc::channel::<io::Result<Vec<u8>>>(5);
+  let (writer, drain) = async_std::channel::bounded(2);
   let buf_drain = futures::stream::TryStreamExt::into_async_read(drain);
 
   // Prepare the response with the correct header
   let response = tide::Response::builder(200)
+    .header("Access-Control-Allow-Origin", "*")
     .content_type(format!("multipart/x-mixed-replace;boundary={MJPG_BOUNDARY}").as_str())
     .body(tide::Body::from_reader(buf_drain, None))
     .build();
@@ -109,54 +151,55 @@ pub async fn snapshot(request: Request<State>) -> Result {
   // from the timestamp of the last message sent on our end, send a new multipart chunk.
   async_std::task::spawn(async move {
     log::debug!("spawned client mjpeg stream handler for {:?}", request.remote());
-
-    let frame_reader = request.state().video_data.read().await;
-    let mut last_frame = (*frame_reader).0;
-    drop(frame_reader);
-
     let mut last_debug = std::time::Instant::now();
-    let mut dropped_frames = 0u32;
+    let mut last_frame = None;
     let mut sent_frames = 0u32;
 
     loop {
-      let now = std::time::Instant::now();
-      let frame_reader = request.state().video_data.read().await;
+      if let Err(error) = sr.recv().await {
+        log::warn!("unable to receive on semaphore channel - {error}");
+        break;
+      }
 
-      if now.duration_since(last_debug).as_secs() > 1 {
-        log::debug!("client debug; [dropped: {dropped_frames}] [sent {sent_frames}]");
+      // Unlock our data mutex and read.
+      let frame_reader = request.state().video.data.read().await;
+      if last_frame.is_some() && last_frame == frame_reader.0 {
+        log::warn!(
+          "stale frame sent past semaphore ({last_frame:?} vs {:?}",
+          frame_reader.0
+        );
+        drop(frame_reader);
+        continue;
+      }
+
+      // Start the buffer that we'll send using the boundary and some multi-part http header
+      // context.
+      let mut buffer = format!(
+        "--{MJPG_BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+        frame_reader.1.len(),
+      )
+      .into_bytes();
+
+      // Actually push the JPEG data into our buffer.
+      buffer.extend_from_slice(frame_reader.1.as_slice());
+
+      // Update this thread's reference to the last frame sent.
+      last_frame = (*frame_reader).0;
+      drop(frame_reader);
+
+      let now = std::time::Instant::now();
+      sent_frames += 1;
+
+      if now.duration_since(last_debug).as_secs() > 3 {
+        log::info!("{sent_frames} frames in 3 seconds");
         last_debug = now;
-        dropped_frames = 0;
         sent_frames = 0;
       }
 
-      if (*frame_reader).0 != last_frame {
-        last_frame = (*frame_reader).0;
-
-        // Start the buffer that we'll send using the boundary and some multi-part http header
-        // context.
-        let mut buffer = format!(
-          "--{MJPG_BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
-          frame_reader.1.len(),
-        )
-        .into_bytes();
-
-        // Actually push the JPEG data into our buffer.
-        buffer.extend_from_slice(frame_reader.1.as_slice());
-        buffer.extend_from_slice(b"\r\n");
-
-        if let Err(error) = writer.try_send(Ok(buffer)) {
-          if error.is_full() {
-            dropped_frames += 1;
-            continue;
-          }
-
-          log::warn!("unable to send received data - {error}");
-          break;
-        }
-
-        sent_frames += 1;
+      if let Err(error) = writer.send(Ok(buffer)).await {
+        log::warn!("unable to send received data - {error}");
+        break;
       }
-      drop(frame_reader);
     }
   });
 

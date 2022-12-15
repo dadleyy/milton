@@ -1,0 +1,26 @@
+[package]
+name = "milton_xiao"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "LED (ws2812) control over serial for the esp32c3"
+rust-version = "1.65.0"
+authors = [
+  "Danny Hadley <dadleyy@gmail.com>"
+]
+
+[lib]
+name = "milton_xiao"
+path = "src/lib.rs"
+
+[dependencies]
+critical-section = "^1.1"
+esp-backtrace = { version = "^0.4", features = ["esp32c3", "panic-handler", "print-uart"] }
+esp32c3 = { version = "0.8.1", features = ["rt", "riscv-rt", "critical-section"] }
+esp32c3-hal = { version = "^0.4", features = ["smartled"] }
+fugit = "0.3.6"
+r0 = "^1.0"
+riscv = "^0.10"
+riscv-rt = "^0.10"
+smart-leds = "0.3.0"

@@ -50,8 +50,8 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
   let mut last_connection_attempt = std::time::Instant::now();
 
   loop {
-    match (connection.is_some(), last_configuration.as_ref()) {
-      (false, Some(configuration)) => {
+    connection = match (connection, last_configuration.as_ref()) {
+      (None, Some(configuration)) => {
         if std::time::Instant::now()
           .duration_since(last_connection_attempt)
           .as_secs()
@@ -59,45 +59,34 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
         {
           log::info!("attempting to establish serial connection to light controller: {configuration:?}");
           last_connection_attempt = std::time::Instant::now();
-          connection = serialport::new(&configuration.device, configuration.baud)
+
+          let connection = serialport::new(&configuration.device, configuration.baud)
             .open()
             .map_err(|error| {
               log::warn!("unable to connect - {error}");
               error
             })
-            .and_then(|mut port| {
-              port
-                .set_timeout(std::time::Duration::from_millis(10))
-                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
-
-              Ok(port)
-            })
             .ok();
+
+          if connection.is_some() {
+            log::info!("serial connection to light controller suceeded");
+          }
+
+          connection
+        } else {
+          None
         }
       }
-      _ => log::trace!("no reconnection necessary"),
-    }
+      (Some(con), _) => Some(con),
+      (None, None) => None,
+    };
 
     match receiver.try_recv() {
       Ok(Command::Configure(configuration)) => {
         log::info!("attempting to update connection via configuration - {configuration:?}");
-
+        // Update our configuration and let the next loop take care of reconnection
         last_configuration = Some(configuration.clone());
-
-        connection = serialport::new(&configuration.device, configuration.baud)
-          .open()
-          .map_err(|error| {
-            log::error!("unable to connect - {error}");
-            error
-          })
-          .and_then(|mut port| {
-            port
-              .set_timeout(std::time::Duration::from_millis(10))
-              .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
-
-            Ok(port)
-          })
-          .ok();
+        continue;
       }
 
       Ok(Command::BasicColor(color @ BasicColor::Red))
@@ -105,13 +94,14 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
       | Ok(Command::BasicColor(color @ BasicColor::Blue)) => {
         connection = match connection.take() {
           Some(mut con) => {
-            log::debug!("turning lights off");
+            log::debug!("sending color command to lights - {color}");
 
-            if let Err(error) = writeln!(con, "{color}") {
+            if let Err(error) = write!(con, "{color}:") {
               log::warn!("unable to write command - {error}");
+              None
+            } else {
+              Some(con)
             }
-
-            Some(con)
           }
 
           None => {
@@ -126,11 +116,12 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
           Some(mut con) => {
             log::debug!("turning lights off");
 
-            if let Err(error) = writeln!(con, "{}", if off == Command::Off { "off" } else { "on" }) {
+            if let Err(error) = write!(con, "{}:", if off == Command::Off { "off" } else { "on" }) {
               log::warn!("unable to write command - {error}");
+              None
+            } else {
+              Some(con)
             }
-
-            Some(con)
           }
 
           None => {
@@ -152,21 +143,24 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
     }
 
     if let Some(ref mut con) = &mut connection {
-      let mut buffer = [0u8; 255];
+      let mut buffer = Vec::new();
+      let has_bytes = con.bytes_to_read().map(|amount| amount > 0).unwrap_or_default();
 
-      match con.read(&mut buffer) {
-        Err(error) if error.kind() == std::io::ErrorKind::TimedOut => log::trace!("nothing to read"),
+      if has_bytes {
+        let read_result = con.read_to_end(&mut buffer);
 
-        Err(error) => {
-          log::warn!("failed reading connection - {error}");
-          connection = None;
+        if let Err(error) = read_result {
+          if error.kind() != std::io::ErrorKind::TimedOut {
+            log::warn!("failed - {error}");
+            break;
+          } else {
+            log::warn!("timeout after buffer read - {error} ({} bytes)", buffer.len());
+          }
         }
 
-        Ok(amount) => {
-          let contents = std::str::from_utf8(&buffer[0..amount]);
-          log::debug!("read {amount} bytes - {contents:?}");
-        }
-      };
+        let contents = String::from_utf8(buffer);
+        log::debug!("read bytes - {contents:?}");
+      }
     }
 
     if std::time::Instant::now().duration_since(last_debug).as_secs() > 5 {

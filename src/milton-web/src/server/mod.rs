@@ -3,7 +3,9 @@ use std::io::{Error, ErrorKind, Result};
 use async_std::channel::Sender;
 use serde::Deserialize;
 use tide::{http::Cookie, Request, Response};
+#[cfg(feature = "camera")]
 use v4l::io::traits::CaptureStream;
+#[cfg(feature = "camera")]
 use v4l::video::Capture;
 
 use crate::oauth;
@@ -19,6 +21,7 @@ pub mod control;
 /// General type definition for side effects.
 pub mod effects;
 
+#[cfg(feature = "camera")]
 /// TODO: move this to a more general video module.
 mod huffman;
 
@@ -53,6 +56,7 @@ pub struct Configuration {
   /// The domain we're hosting from; used for cookies.
   domain: String,
 
+  #[cfg(feature = "camera")]
   /// The kernel managed device path compatible with v4l.
   video_device: Option<String>,
 
@@ -282,12 +286,14 @@ pub(crate) async fn missing(req: Request<State>) -> tide::Result {
   Ok(Response::builder(404).build())
 }
 
+#[allow(unused_mut)]
 /// This is the main entry point for the http server responsible for setting up routes and binding
 /// our shared state to the tcp listener.
 pub async fn listen<S>(mut state: State, addr: S) -> std::io::Result<()>
 where
   S: std::convert::AsRef<str>,
 {
+  #[cfg(feature = "camera")]
   if let Some(path) = &state.config.video_device {
     let dev = v4l::Device::with_path(path)?;
     let mut has_support = false;

@@ -162,8 +162,8 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: milton-web-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
-          path: src/milton-web/milton-web-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
+          name: milton-alexa-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
+          path: src/milton-alexa/milton-alexa-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
 
   # rust middleware compilation
   build-web:

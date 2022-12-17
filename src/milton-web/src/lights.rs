@@ -43,7 +43,7 @@ impl std::fmt::Display for Command {
   fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
     match self {
       Self::On => write!(formatter, "on:"),
-      Self::Off => write!(formatter, "on:"),
+      Self::Off => write!(formatter, "off:"),
       Self::BasicColor(color) => write!(formatter, "{color}:"),
       _ => Ok(()),
     }

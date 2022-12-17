@@ -9,16 +9,16 @@ path = "src/lib.rs"
 
 
 [dependencies]
-async-std = "1.12.0"
-chrono = "0.4.23"
-clap = { version = "4.0.29", features = ["derive", "cargo"] }
-dotenv = "0.15.0"
-env_logger = "0.10.0"
-futures-lite = "1.12.0"
-log = "0.4.17"
-quick-xml = "0.26.0"
-serde = { version = "1.0.151", features = ["derive"] }
-surf = "2.3.2"
-tide = "0.16.0"
-toml = "0.5.10"
-uuid = { version = "1.2.2", features = ["v4"] }
+async-std = "^1.12"
+chrono = "^0.4"
+clap = { version = "^4.0", features = ["derive", "cargo"] }
+dotenv = "^0.15"
+env_logger = "^0.10"
+futures-lite = "^1.12"
+log = "^0.4"
+quick-xml = "^0.26"
+serde = { version = "^1.0", features = ["derive"] }
+surf = "^2.3"
+tide = "^0.16"
+toml = "^0.5"
+uuid = { version = "^1.2", features = ["v4"] }

@@ -152,6 +152,19 @@ jobs:
         env:
           MILTON_VERSION: "${{ steps.vars.outputs.SHA_SHORT }}"
 
+      # bundling + artifact generation:
+      - name: "bundle - prepare"
+        run: mkdir -p milton-alexa-dist/bin
+      - name: "bundle - populate"
+        run: cp target/aarch64-unknown-linux-gnu/release/milton-alexa milton-alexa-dist/bin/milton-alexa
+      - name: "bundle - create"
+        run: tar cvzf milton-alexa-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz milton-alexa-dist
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: milton-web-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
+          path: src/milton-web/milton-web-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
+
   # rust middleware compilation
   build-web:
     runs-on: ubuntu-latest
@@ -209,7 +222,7 @@ jobs:
 
   publish:
     runs-on: ubuntu-latest
-    needs: ["build-ui", "build-web", "build-light-controller"]
+    needs: ["build-ui", "build-web", "build-light-controller", "build-alexa"]
     steps:
       - uses: actions/checkout@v3
 
@@ -222,6 +235,9 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: "milton-light-controller-riscv32imc-unknown-none-elf-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz"
+      - uses: actions/download-artifact@v3
+        with:
+          name: "milton-alexa-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz"
       - uses: actions/download-artifact@v3
         with:
           name: "milton-web-aarch64-unknown-linux-gnu-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz"

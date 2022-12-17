@@ -5,5 +5,5 @@ A web app for controlling lights on a printer and getting less-sensitive info fr
 ```
 /src/milton-ui         <- elm frontend source code
 /src/milton-web        <- rust web application
-/src/milton-pio-lights <- "firmware" for led strip
+/src/milton-rs-lights  <- rust firmware for esp32c3 ws2812 led controller
 ```

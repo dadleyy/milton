@@ -1,7 +1,7 @@
 use async_std::channel;
 use async_std::stream::StreamExt;
 use serde::Deserialize;
-use std::io::Result;
+use std::io::{self, Result};
 
 #[allow(clippy::missing_docs_in_private_items)]
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -39,15 +39,47 @@ pub enum Command {
   Off,
 }
 
+impl std::fmt::Display for Command {
+  fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    match self {
+      Self::On => write!(formatter, "on:"),
+      Self::Off => write!(formatter, "on:"),
+      Self::BasicColor(color) => write!(formatter, "{color}:"),
+      _ => Ok(()),
+    }
+  }
+}
+
+/// Helper method that will attempt to pull a message off our channel and handle returning an err
+/// based on the correct conditions when that should occur.
+fn next(channel: &mut channel::Receiver<Command>) -> Result<Option<Command>> {
+  if channel.is_closed() {
+    return Err(io::Error::new(io::ErrorKind::Other, "message channel has been closed"));
+  }
+
+  match channel.try_recv() {
+    Err(error) if error.is_empty() => Ok(None),
+    Err(other) => Err(io::Error::new(io::ErrorKind::Other, format!("{other}"))),
+    Ok(cmd) => Ok(Some(cmd)),
+  }
+}
+
 #[allow(clippy::missing_docs_in_private_items)]
-pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
+pub async fn run(mut receiver: channel::Receiver<Command>) -> Result<()> {
   log::debug!("starting light effect manager runtime");
-  let mut timer = async_std::stream::interval(std::time::Duration::from_millis(100));
+  let mut timer = async_std::stream::interval(std::time::Duration::from_millis(10));
+
+  // The connection will hold our serialport ttyport.
   let mut connection = None;
+
   let mut empty_reads = 0;
   let mut last_debug = std::time::Instant::now();
   let mut last_configuration: Option<LightConfiguration> = None;
-  let mut last_connection_attempt = std::time::Instant::now();
+
+  // A bit of a hack, we could use an `Option<Instant>` instead. The goal here is to allow the
+  // first configuration message to kick in immediately, while forcing others to wait a short
+  // period.
+  let mut last_connection_attempt = std::ops::Sub::sub(std::time::Instant::now(), std::time::Duration::from_secs(10));
 
   loop {
     connection = match (connection, last_configuration.as_ref()) {
@@ -81,66 +113,17 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
       (None, None) => None,
     };
 
-    match receiver.try_recv() {
-      Ok(Command::Configure(configuration)) => {
-        log::info!("attempting to update connection via configuration - {configuration:?}");
-        // Update our configuration and let the next loop take care of reconnection
-        last_configuration = Some(configuration.clone());
+    let bytes_to_send = match next(&mut receiver)? {
+      Some(command @ Command::Off) | Some(command @ Command::On) | Some(command @ Command::BasicColor(_)) => {
+        Some(format!("{command}"))
+      }
+      Some(Command::Configure(config)) => {
+        log::info!("received updated light-controller serial configuration to apply");
+        last_configuration = Some(config);
         continue;
       }
-
-      Ok(Command::BasicColor(color @ BasicColor::Red))
-      | Ok(Command::BasicColor(color @ BasicColor::Green))
-      | Ok(Command::BasicColor(color @ BasicColor::Blue)) => {
-        connection = match connection.take() {
-          Some(mut con) => {
-            log::debug!("sending color command to lights - {color}");
-
-            if let Err(error) = write!(con, "{color}:") {
-              log::warn!("unable to write command - {error}");
-              None
-            } else {
-              Some(con)
-            }
-          }
-
-          None => {
-            log::warn!("no serial connection ready yet");
-            None
-          }
-        };
-      }
-
-      Ok(off @ Command::Off) | Ok(off @ Command::On) => {
-        connection = match connection.take() {
-          Some(mut con) => {
-            log::debug!("turning lights off");
-
-            if let Err(error) = write!(con, "{}:", if off == Command::Off { "off" } else { "on" }) {
-              log::warn!("unable to write command - {error}");
-              None
-            } else {
-              Some(con)
-            }
-          }
-
-          None => {
-            log::warn!("no serial connection ready yet");
-            None
-          }
-        };
-      }
-
-      Err(error) if error.is_closed() => {
-        log::warn!("unable to read - {error}");
-        break;
-      }
-
-      Err(_) => {
-        log::trace!("no messages");
-        empty_reads += 1;
-      }
-    }
+      None => None,
+    };
 
     if let Some(ref mut con) = &mut connection {
       let mut buffer = Vec::new();
@@ -160,6 +143,12 @@ pub async fn run(receiver: channel::Receiver<Command>) -> Result<()> {
 
         let contents = String::from_utf8(buffer);
         log::debug!("read bytes - {contents:?}");
+      }
+
+      if let Some(message) = bytes_to_send {
+        if let Err(error) = write!(con, "{message}") {
+          log::warn!("unable to write message - {error}");
+        }
       }
     }
 

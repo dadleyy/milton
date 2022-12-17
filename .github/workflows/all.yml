@@ -125,6 +125,33 @@ jobs:
           name: milton-light-controller-riscv32imc-unknown-none-elf-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
           path: src/milton-rs-lights/milton-light-controller-riscv32imc-unknown-none-elf-${{ steps.vars.outputs.SHA_SHORT }}.tar.gz
 
+  build-alexa:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/milton-alexa
+    container:
+      image: ghcr.io/iced-rs/aarch64:latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: "set output: verify git version"
+        run: git --version
+      - name: "set output: short_sha"
+        id: vars
+        run: echo "SHA_SHORT=$(echo $GITHUB_SHA | head -c 7)">>$GITHUB_OUTPUT
+      - name: "set output: verify"
+        run: echo "${{ steps.vars.outputs.SHA_SHORT }}"
+
+      - name: "apt - update"
+        run: apt-get update
+      - name: "apt - install things"
+        run: apt-get install libssl-dev:armhf -y
+
+      - name: "cargo - build"
+        run: . $HOME/.cargo/env && cargo build --target aarch64-unknown-linux-gnu --release
+        env:
+          MILTON_VERSION: "${{ steps.vars.outputs.SHA_SHORT }}"
+
   # rust middleware compilation
   build-web:
     runs-on: ubuntu-latest

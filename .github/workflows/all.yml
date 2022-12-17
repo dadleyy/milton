@@ -157,7 +157,7 @@ jobs:
         run: . $HOME/.cargo/env && rustup component add --target aarch64-unknown-linux-gnu rust-std rust-src rustc-dev
 
       - name: "cargo - build"
-        run: . /root/.cargo/env && cargo build --target aarch64-unknown-linux-gnu --release
+        run: . $HOME/.cargo/env && cargo build --target aarch64-unknown-linux-gnu --release
         env:
           OPENSSL_LIB_DIR: /etc/arm-dependencies/openssl-3.0.7
           OPENSSL_INCLUDE_DIR: /etc/arm-dependencies/openssl-3.0.7/include

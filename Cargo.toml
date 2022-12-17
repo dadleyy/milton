@@ -1,7 +1,0 @@
-[workspace]
-members = [
-  "src/milton-web",
-  "src/milton-alexa"
-  # todo: different target, figure out how to fit here.
-  # "src/milton-rs-lights"
-]

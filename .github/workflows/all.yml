@@ -145,10 +145,10 @@ jobs:
       - name: "apt - update"
         run: apt-get update
       - name: "apt - install things"
-        run: apt-get install libssl-dev:armhf -y
+        run: apt-get install libssl-dev:arm64 -y
 
       - name: "cargo - build"
-        run: . $HOME/.cargo/env && cargo build --target aarch64-unknown-linux-gnu --release
+        run: . /root/.cargo/env && cargo build --target aarch64-unknown-linux-gnu --release
         env:
           MILTON_VERSION: "${{ steps.vars.outputs.SHA_SHORT }}"
 

@@ -131,7 +131,7 @@ jobs:
       run:
         working-directory: src/milton-alexa
     container:
-      image: ghcr.io/iced-rs/aarch64:latest
+      image: dadleyy/ubuntu-jammy-opnssl-3.x-rust-aarch64-compiler:latest
     steps:
       - uses: actions/checkout@v3
       - name: "set output: verify git version"
@@ -144,12 +144,23 @@ jobs:
 
       - name: "apt - update"
         run: apt-get update
-      - name: "apt - install things"
-        run: apt-get install libssl-dev:arm64 -y
+      - name: "apt - install libudev-dev"
+        run: apt-get install libudev-dev pkg-config clang -y
+
+      - name: "rust - download"
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > /tmp/rustup-install.sh
+      - name: "rust - install"
+        run: sh /tmp/rustup-install.sh -y
+      - name: "rust - add target"
+        run: . $HOME/.cargo/env && rustup target add aarch64-unknown-linux-gnu
+      - name: "rust - add components"
+        run: . $HOME/.cargo/env && rustup component add --target aarch64-unknown-linux-gnu rust-std rust-src rustc-dev
 
       - name: "cargo - build"
         run: . /root/.cargo/env && cargo build --target aarch64-unknown-linux-gnu --release
         env:
+          OPENSSL_LIB_DIR: /etc/arm-dependencies/openssl-3.0.7
+          OPENSSL_INCLUDE_DIR: /etc/arm-dependencies/openssl-3.0.7/include
           MILTON_VERSION: "${{ steps.vars.outputs.SHA_SHORT }}"
 
       # bundling + artifact generation:

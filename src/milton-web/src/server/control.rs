@@ -83,12 +83,7 @@ pub async fn snapshot(request: Request<State>) -> Result {
       log::info!("authorizing stream as octoprint");
     }
     _ => {
-      let claims = super::claims(&request).ok_or_else(|| {
-        log::warn!("unauthorized attempt to access camera control");
-        tide::Error::from_str(404, "not-found")
-      })?;
-
-      if request.state().authority(&claims.oid).await.is_none() {
+      if super::authority(&request).await.is_none() {
         return Ok(tide::Response::new(404));
       }
     }
@@ -116,12 +111,8 @@ pub async fn stream(request: Request<State>) -> Result {
       log::info!("authorizing stream as octoprint");
     }
     _ => {
-      let claims = super::claims(&request).ok_or_else(|| {
+      if super::authority(&request).await.is_none() {
         log::warn!("unauthorized attempt to access camera control");
-        tide::Error::from_str(404, "not-found")
-      })?;
-
-      if request.state().authority(&claims.oid).await.is_none() {
         return Ok(tide::Response::new(404));
       }
     }
@@ -208,7 +199,7 @@ pub async fn stream(request: Request<State>) -> Result {
 
 /// ROUTE: fetches current job information from octoprint api
 pub async fn query(req: Request<State>) -> Result {
-  super::claims(&req).ok_or_else(|| {
+  super::authority(&req).await.ok_or_else(|| {
     log::warn!("unauthorized attempt to query state");
     tide::Error::from_str(404, "not-found")
   })?;
@@ -238,12 +229,7 @@ pub async fn query(req: Request<State>) -> Result {
 /// ROUTE: sends command to heartbeat/light controls.
 pub async fn command(mut req: Request<State>) -> Result {
   let mut timer = std::time::Instant::now();
-  let claims = super::claims(&req).ok_or_else(|| {
-    log::warn!("unauthorized attempt to commit command");
-    tide::Error::from_str(404, "not-found")
-  })?;
-
-  req.state().authority(&claims.oid).await.ok_or_else(|| {
+  super::authority(&req).await.ok_or_else(|| {
     log::warn!("unauthorized attempt to commit command");
     tide::Error::from_str(404, "not-found")
   })?;

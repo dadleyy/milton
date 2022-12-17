@@ -1,7 +1,10 @@
+//! This module contains the http json api server code. It is still a work-in-progress; things like
+//! where the video streaming task and final route layout are still being figured out.
+
 use std::io::{Error, ErrorKind, Result};
 
 use async_std::channel::Sender;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tide::{http::Cookie, Request, Response};
 #[cfg(feature = "camera")]
 use v4l::io::traits::CaptureStream;
@@ -30,6 +33,8 @@ mod huffman;
 pub(crate) enum Authority {
   /// Unlimited access.
   Admin,
+  /// Unlimited access, implies machine.
+  AutomatedAdmin,
 }
 
 /// This is a hodgepodge of config.
@@ -52,6 +57,9 @@ pub struct Configuration {
 
   /// The redis port that we will use for session storage.
   redis_port: u32,
+
+  /// The key with our redis instance where we will store tokens.
+  token_store: String,
 
   /// The domain we're hosting from; used for cookies.
   domain: String,
@@ -269,19 +277,90 @@ impl State {
   }
 }
 
+// TODO: There is a bit of awkward design between the shared state and these "floating" functions.
+// Since these functions deal with the request itself, it felt a bit odd if there were functions on
+// the `State` type itself, e.g:
+//
+// ```
+// fn authority(&self, request: Request<Self>) -> Option<...>;
+// ```
+
 /// Returns the cookie responsible for holding our session from the request http header.
-pub(crate) fn cookie(request: &Request<State>) -> Option<Cookie<'static>> {
+fn cookie(request: &Request<State>) -> Option<Cookie<'static>> {
   request.cookie(auth::COOKIE_NAME)
 }
 
-/// Returns the decoded jwd claims based on the cookie provided by an http request.
-pub(crate) fn claims(request: &Request<State>) -> Option<sec::Claims> {
+/// Returns the decoded JWT claims based on the cookie provided by an http request.
+fn claims(request: &Request<State>) -> Option<sec::Claims> {
   let cook = cookie(request)?;
   sec::Claims::decode(&cook.value(), &request.state().config.jwt_secret).ok()
 }
 
+/// The minimal url query structure we need to deserialize into for automated admin authorization
+/// status.
+#[derive(Deserialize)]
+struct QueryWithAdminToken {
+  /// A special token lookup.
+  _admin_token: String,
+}
+
+/// Given a request, this method will do what it can to figure out with what authority we are
+/// working with.
+pub(crate) async fn authority(request: &Request<State>) -> Option<Authority> {
+  let state = request.state();
+
+  if let Some(cookie_claims) = claims(request) {
+    return state.authority(&cookie_claims.oid).await;
+  }
+
+  let admin_query = request.query::<QueryWithAdminToken>().ok()?;
+
+  // Start by getting the list of our current tokens
+  let get_command = kramer::Command::Hashes::<&str, &str>(kramer::HashCommand::Get(
+    &state.config.token_store,
+    Some(kramer::Arity::One("_admin")),
+  ));
+  let response = state.command(get_command).await.ok()?;
+
+  if let kramer::Response::Item(kramer::ResponseValue::String(content)) = response {
+    let parsed = serde_json::from_str::<Vec<String>>(&content)
+      .map_err(|error| {
+        log::warn!("unable to parse admin token store from redis - {error}");
+        error
+      })
+      .ok()?;
+
+    if parsed.contains(&admin_query._admin_token) {
+      log::warn!("authorized as an automated admin via token");
+      return Some(Authority::AutomatedAdmin);
+    }
+
+    log::error!(
+      "dangerous attempt to authorized as admin using token '{}'",
+      admin_query._admin_token
+    );
+  }
+
+  None
+}
+
+#[derive(Serialize)]
+struct Heartbeat<'a> {
+  time: chrono::DateTime<chrono::Utc>,
+  version: &'a String,
+}
+
+/// The heartbeat url.
+async fn heartbeat(req: Request<State>) -> tide::Result {
+  let body = tide::Body::from_json(&Heartbeat {
+    time: chrono::Utc::now(),
+    version: &req.state().version,
+  })?;
+  Ok(Response::builder(200).body(body).build())
+}
+
 /// The catchall 404 handling route.
-pub(crate) async fn missing(req: Request<State>) -> tide::Result {
+async fn missing(req: Request<State>) -> tide::Result {
   log::warn!("[warning] unknown request received - '{}'", req.url().path());
   Ok(Response::builder(404).build())
 }
@@ -408,6 +487,8 @@ where
   }
 
   let mut app = tide::with_state(state);
+
+  app.at("/status").get(heartbeat);
 
   app.at("/control").post(control::command);
   app.at("/control").get(control::query);

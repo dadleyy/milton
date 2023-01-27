@@ -75,6 +75,7 @@ pub async fn run(mut receiver: channel::Receiver<Command>) -> Result<()> {
   let mut empty_reads = 0;
   let mut last_debug = std::time::Instant::now();
   let mut last_configuration: Option<LightConfiguration> = None;
+  let mut force_reconnect = false;
 
   // A bit of a hack, we could use an `Option<Instant>` instead. The goal here is to allow the
   // first configuration message to kick in immediately, while forcing others to wait a short
@@ -82,8 +83,8 @@ pub async fn run(mut receiver: channel::Receiver<Command>) -> Result<()> {
   let mut last_connection_attempt = std::ops::Sub::sub(std::time::Instant::now(), std::time::Duration::from_secs(10));
 
   loop {
-    connection = match (connection, last_configuration.as_ref()) {
-      (None, Some(configuration)) => {
+    connection = match (connection, last_configuration.as_ref(), force_reconnect) {
+      (None, Some(configuration), _) | (_, Some(configuration), true) => {
         if std::time::Instant::now()
           .duration_since(last_connection_attempt)
           .as_secs()
@@ -109,9 +110,13 @@ pub async fn run(mut receiver: channel::Receiver<Command>) -> Result<()> {
           None
         }
       }
-      (Some(con), _) => Some(con),
-      (None, None) => None,
+      (Some(con), _, _) => Some(con),
+      (None, None, _) => None,
     };
+
+    if force_reconnect {
+      force_reconnect = false;
+    }
 
     let bytes_to_send = match next(&mut receiver)? {
       Some(command @ Command::Off) | Some(command @ Command::On) | Some(command @ Command::BasicColor(_)) => {
@@ -148,6 +153,7 @@ pub async fn run(mut receiver: channel::Receiver<Command>) -> Result<()> {
       if let Some(message) = bytes_to_send {
         if let Err(error) = write!(con, "{message}") {
           log::warn!("unable to write message - {error}");
+          force_reconnect = true;
         }
       }
     }
